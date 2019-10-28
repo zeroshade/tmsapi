@@ -1,6 +1,7 @@
 package main
 
 import (
+  "os"
 	"crypto/x509"
 	"encoding/base64"
 	"encoding/pem"
@@ -14,7 +15,11 @@ import (
 )
 
 // WebhookID is the constant id from PayPal for this webhook
-const WebhookID = ""
+var WebhookID string
+
+func init() {
+  WebhookID = os.Getenv("WEBHOOK_ID")
+}
 
 // HandlePaypalWebhook returns a handler function that verifies a paypal webhook
 // post request and then processes the event message
