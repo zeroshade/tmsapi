@@ -35,18 +35,21 @@ func HandlePaypalWebhook() gin.HandlerFunc {
 		defer c.Request.Body.Close()
 		body, err := ioutil.ReadAll(c.Request.Body)
 		if err != nil {
-			c.Abort()
+      log.Println(err)
+      c.Status(http.StatusBadRequest)
 			return
 		}
 
 		cert, err := GetCert(certurl)
 		if err != nil {
-			c.Abort()
+      log.Println(err)
+      c.Status(http.StatusBadRequest)
 			return
 		}
 
 		if !VerifySig(cert, transmissionid, timestamp, webhookid, sig, body) {
-			c.Abort()
+      log.Println("Didn't Verify")
+      c.Status(http.StatusBadRequest)
 			return
 		}
 
