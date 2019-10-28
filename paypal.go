@@ -9,7 +9,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
-
+  "log"
 	"github.com/gin-gonic/gin"
 )
 
@@ -45,6 +45,7 @@ func HandlePaypalWebhook() gin.HandlerFunc {
 			return
 		}
 
+    log.Println(string(body))
 		c.Status(http.StatusOK)
 	}
 }

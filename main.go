@@ -53,5 +53,6 @@ func main() {
 	router.PUT("/product", SaveProduct(db))
 	router.PUT("/tickets", SaveTicketCats(db))
 	router.GET("/tickets", GetTicketCats(db))
+  router.POST("/paypal", HandlePaypalWebhook())
 	router.Run(":" + port)
 }
