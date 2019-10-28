@@ -61,7 +61,7 @@ type WebHookEvent struct {
 			} `json:"payee"`
 			Desc     string `json:"description"`
 			SoftDesc string `json:"soft_descriptor"`
-			ItemList []struct {
+			ItemList struct {
 				Items []struct {
 					Name     string  `json:"name"`
 					Sku      string  `json:"sku"`
