@@ -13,8 +13,11 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-const WEBHOOK_ID = ""
+// WebhookID is the constant id from PayPal for this webhook
+const WebhookID = ""
 
+// HandlePaypalWebhook returns a handler function that verifies a paypal webhook
+// post request and then processes the event message
 func HandlePaypalWebhook() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		sig := c.GetHeader("PAYPAL-TRANSMISSION-SIG")
@@ -22,7 +25,7 @@ func HandlePaypalWebhook() gin.HandlerFunc {
 
 		transmissionid := c.GetHeader("PAYPAL-TRANSMISSION-ID")
 		timestamp := c.GetHeader("PAYPAL-TRANSMISSION-TIME")
-		webhookid := WEBHOOK_ID
+		webhookid := WebhookID
 
 		defer c.Request.Body.Close()
 		body, err := ioutil.ReadAll(c.Request.Body)
@@ -46,6 +49,7 @@ func HandlePaypalWebhook() gin.HandlerFunc {
 	}
 }
 
+// GetCert retrieves the PEM certificate using the URL that was provided
 func GetCert(certurl string) (*x509.Certificate, error) {
 	resp, err := http.Get(certurl)
 	if err != nil {
@@ -62,7 +66,13 @@ func GetCert(certurl string) (*x509.Certificate, error) {
 	return x509.ParseCertificate(block.Bytes)
 }
 
+// VerifySig takes in the certificate and necessary data to validate the signature that
+// was provided for this webhook post request
 func VerifySig(cert *x509.Certificate, transid, timestamp, webhookid, sig string, body []byte) bool {
+	if cert == nil {
+		return false
+	}
+
 	crc := crc32.ChecksumIEEE(body)
 	expectsig := strings.Join([]string{transid, timestamp, webhookid, strconv.Itoa(int(crc))}, "|")
 

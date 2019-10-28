@@ -7,6 +7,7 @@ import (
 	"github.com/lib/pq"
 )
 
+// ScheduleTime represents a specific trip time for the schedule
 type ScheduleTime struct {
 	ID         uint   `json:"id"`
 	ScheduleID uint   `json:"-"`
@@ -14,12 +15,14 @@ type ScheduleTime struct {
 	Price      string `json:"price"`
 }
 
+// NotAvail represents a specific date that is not available for this trip
 type NotAvail struct {
 	ID         uint   `json:"id"`
 	ScheduleID uint   `json:"-"`
 	Day        string `json:"day"`
 }
 
+// Schedule represents a full schedule that a Product can have multiple of
 type Schedule struct {
 	ProductID    uint           `json:"-"`
 	ID           uint           `json:"id" gorm:"primary_key"`
@@ -31,6 +34,7 @@ type Schedule struct {
 	NotAvail     []NotAvail     `json:"notAvailArray"`
 }
 
+// MarshalJSON handles the proper date formatting for schedules
 func (s *Schedule) MarshalJSON() ([]byte, error) {
 	type Alias Schedule
 	return json.Marshal(&struct {
@@ -44,6 +48,7 @@ func (s *Schedule) MarshalJSON() ([]byte, error) {
 	})
 }
 
+// UnmarshalJSON handles the proper date formatting for schedules
 func (s *Schedule) UnmarshalJSON(data []byte) error {
 	type Alias Schedule
 	aux := &struct {

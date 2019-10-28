@@ -8,6 +8,7 @@ import (
 	"github.com/jinzhu/gorm"
 )
 
+// Product represents a specific Type of tickets sold
 type Product struct {
 	ID          uint       `json:"id"`
 	CreatedAt   time.Time  `json:"-"`
@@ -21,6 +22,7 @@ type Product struct {
 	Schedules   []Schedule `json:"schedList"`
 }
 
+// SaveProduct exports a handler for reading in a product and saving it to the db
 func SaveProduct(db *gorm.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var inprod Product
