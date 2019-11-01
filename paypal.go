@@ -148,9 +148,9 @@ type Payment struct {
 	Payer        struct {
 		PaymentMethod string    `json:"payment_method"`
 		Status        string    `json:"status"`
-		PayerID       uint      `json:"-"`
+		PayerID       string    `json:"-"`
 		PayerInfo     PayerInfo `json:"payer_info"`
-	} `json:"payer" gorm:"embedded;embedded_prefix:payer_"`
+	} `json:"payer" gorm:"embedded"`
 	CartID string `json:"cart"`
 }
 

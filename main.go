@@ -24,7 +24,7 @@ func main() {
 	}
 	defer db.Close()
 	db.AutoMigrate(&Product{}, &Schedule{}, &ScheduleTime{}, &NotAvail{}, &TicketCategory{},
-		&Transaction{}, &Payment{}, &Sale{})
+		&Transaction{}, &Payment{}, &Sale{}, &PayerInfo{})
 	db.Model(&Schedule{}).Association("TimeArray")
 	db.Model(&Schedule{}).Association("NotAvail")
 
