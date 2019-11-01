@@ -94,7 +94,7 @@ type item struct {
 
 type Transaction struct {
 	TransactionID uint   `json:"-" gorm:"primary_key"`
-	PaymentID     uint   `json:"-"`
+	PaymentID     string `json:"-"`
 	Amount        amount `json:"amount" gorm:"embedded"`
 	Payee         struct {
 		MerchantID string `json:"merchant_id"`
