@@ -1,24 +1,26 @@
 package main
 
 import (
-  "os"
 	"crypto/x509"
 	"encoding/base64"
+	"encoding/json"
 	"encoding/pem"
 	"hash/crc32"
 	"io/ioutil"
+	"log"
 	"net/http"
+	"os"
 	"strconv"
 	"strings"
-  "log"
-  "time"
-  "encoding/json"
+	"time"
+
 	"github.com/gin-gonic/gin"
+	"github.com/jinzhu/gorm"
 )
 
 type amount struct {
 	Total    float32 `json:"total,string"`
-	Currency string  `json:"currency"`
+	Currency string  `json:"currency" gorm:"-"`
 }
 
 type link struct {
@@ -37,86 +39,148 @@ type PayerInfo struct {
 	Email     string `json:"email"`
 	FirstName string `json:"first_name"`
 	LastName  string `json:"last_name"`
-	PayerId   string `json:"payer_id"`
+	PayerID   string `json:"payer_id" gorm:"primary_key"`
 	Phone     string `json:"phone"`
 	Country   string `json:"country_code"`
 }
 
 type WebHookEvent struct {
-	Id           string    `json:"id"`
-	CreateTime   time.Time `json:"create_time"`
-	ResourceType string    `json:"resource_type"`
-	EventType    string    `json:"event_type"`
-	Summary      string    `json:"summary"`
-	Resource     struct {
-		cutime
-		Links        []link `json:"links"`
-		Id           string `json:"id"`
-		State        string `json:"state"`
-		Transactions []struct {
-			Amount amount `json:"amount"`
-			Payee  struct {
-				MerchantId string `json:"merchant_id"`
-				Email      string `json:"email"`
-			} `json:"payee"`
-			Desc     string `json:"description"`
-			SoftDesc string `json:"soft_descriptor"`
-			ItemList struct {
-				Items []struct {
-					Name     string  `json:"name"`
-					Sku      string  `json:"sku"`
-					Price    float32 `json:"price,string"`
-					Currency string  `json:"currency"`
-					Tax      float32 `json:"tax,string"`
-					Qty      uint32  `json:"quantity"`
-				} `json:"items"`
-			} `json:"item_list"`
-			RelatedResources []struct {
-				Sale struct {
-					cutime
-					Id              string `json:"id"`
-					State           string `json:"state"`
-					Amount          amount `json:"amount"`
-					PaymentMode     string `json:"payment_mode"`
-					ProtectEligible string `json:"protection_eligibility"`
-					TransactionFee  struct {
-						Value    float32 `json:"value,string"`
-						Currency string  `json:"currency"`
-					} `json:"transaction_fee"`
-					ParentPayment string `json:"parent_payment"`
-					Links         []link `json:"links"`
-					SoftDesc      string `json:"soft_descriptor"`
-				} `json:"sale"`
-			} `json:"related_resources"`
-		} `json:"transactions"`
-		Intent string `json:"intent"`
-		Payer  struct {
-			PaymentMethod string    `json:"payment_method"`
-			Status        string    `json:"status"`
-			PayerInfo     PayerInfo `json:"payer_info"`
-		} `json:"payer"`
-		Cart string `json:"cart"`
-	} `json:"resource"`
+	ID            string    `json:"id"`
+	CreateTime    time.Time `json:"create_time"`
+	ResourceType  string    `json:"resource_type"`
+	EventType     string    `json:"event_type"`
+	Summary       string    `json:"summary"`
+	Resource      interface{}
 	Status        string `json:"status"`
 	Transmissions []struct {
-		WebhookUrl     string `json:"webhook_url"`
-		TransmissionId string `json:"transmission_id"`
+		WebhookURL     string `json:"webhook_url"`
+		TransmissionID string `json:"transmission_id"`
 		Status         string `json:"status"`
 	} `json:"transmissions"`
 	Links        []link `json:"links"`
 	EventVersion string `json:"event_version"`
 }
 
+func (w *WebHookEvent) UnmarshalJSON(data []byte) error {
+	type Alias WebHookEvent
+	aux := &struct {
+		*Alias
+		RawResource *json.RawMessage `json:"resource"`
+	}{
+		Alias: (*Alias)(w),
+	}
+	if err := json.Unmarshal(data, &aux); err != nil {
+		return err
+	}
+
+	switch aux.ResourceType {
+	case "sale":
+		aux.Resource = new(Sale)
+	case "payment":
+		aux.Resource = new(Payment)
+	}
+
+	return json.Unmarshal(*aux.RawResource, aux.Resource)
+}
+
+type item struct {
+	Name     string  `json:"name"`
+	Sku      string  `json:"sku"`
+	Price    float32 `json:"price,string"`
+	Currency string  `json:"currency"`
+	Tax      float32 `json:"tax,string"`
+	Qty      uint32  `json:"quantity"`
+}
+
+type Transaction struct {
+	TransactionID uint   `json:"-" gorm:"primary_key"`
+	PaymentID     uint   `json:"-"`
+	Amount        amount `json:"amount" gorm:"embedded"`
+	Payee         struct {
+		MerchantID string `json:"merchant_id"`
+		Email      string `json:"email"`
+	} `json:"payee" gorm:"embedded;embedded_prefix:payee_"`
+	Desc     string `json:"description"`
+	SoftDesc string `json:"soft_descriptor"`
+	ItemList struct {
+		Items []item `json:"items"`
+	} `json:"item_list" gorm:"-"`
+
+	RelatedResources []interface{} `gorm:"-"`
+}
+
+func (t *Transaction) UnmarshalJSON(data []byte) error {
+	type Alias Transaction
+	aux := &struct {
+		*Alias
+		Related []map[string]*json.RawMessage `json:"related_resources"`
+	}{
+		Alias: (*Alias)(t),
+	}
+	err := json.Unmarshal(data, &aux)
+	if err != nil {
+		return err
+	}
+
+	for _, m := range aux.Related {
+		for k, v := range m {
+			if k == "sale" {
+				s := new(Sale)
+				if err = json.Unmarshal(*v, s); err != nil {
+					return err
+				}
+
+				aux.RelatedResources = append(aux.RelatedResources, s)
+			}
+		}
+	}
+
+	return nil
+}
+
+type Payment struct {
+	cutime
+	ID           string        `json:"id" gorm:"primary_key"`
+	Links        []link        `json:"links"`
+	State        string        `json:"state"`
+	Transactions []Transaction `json:"transactions"`
+	Intent       string        `json:"intent"`
+	Payer        struct {
+		PaymentMethod string    `json:"payment_method"`
+		Status        string    `json:"status"`
+		PayerID       uint      `json:"-"`
+		PayerInfo     PayerInfo `json:"payer_info"`
+	} `json:"payer" gorm:"embedded;embedded_prefix:payer_"`
+	CartID string `json:"cart"`
+}
+
+type Sale struct {
+	cutime
+	ID             string `json:"id" gorm:"primary_key"`
+	Amount         amount `json:"amount" gorm:"embedded"`
+	PaymentMode    string `json:"payment_mode"`
+	TransactionFee struct {
+		Value    float32 `json:"value,string" gorm:"column:transaction_fee"`
+		Currency string  `json:"currency" gorm:"-"`
+	} `json:"transaction_fee" gorm:"embedded"`
+	ParentPayment   string `json:"parent_payment"`
+	SoftDesc        string `json:"soft_descriptor"`
+	ProtectEligible string `json:"protection_eligibility"`
+	Links           []link `json:"links"`
+	State           string `json:"state"`
+	InvoiceNum      string `json:"invoice_number"`
+}
+
 // WebhookID is the constant id from PayPal for this webhook
 var WebhookID string
 
 func init() {
-  WebhookID = os.Getenv("WEBHOOK_ID")
+	WebhookID = os.Getenv("WEBHOOK_ID")
 }
 
 // HandlePaypalWebhook returns a handler function that verifies a paypal webhook
 // post request and then processes the event message
-func HandlePaypalWebhook() gin.HandlerFunc {
+func HandlePaypalWebhook(db *gorm.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		sig := c.GetHeader("PAYPAL-TRANSMISSION-SIG")
 		certurl := c.GetHeader("PAYPAL-CERT-URL")
@@ -128,30 +192,41 @@ func HandlePaypalWebhook() gin.HandlerFunc {
 		defer c.Request.Body.Close()
 		body, err := ioutil.ReadAll(c.Request.Body)
 		if err != nil {
-      log.Println(err)
-      c.Status(http.StatusBadRequest)
+			log.Println(err)
+			c.Status(http.StatusBadRequest)
 			return
 		}
 
 		cert, err := GetCert(certurl)
 		if err != nil {
-      log.Println(err)
-      c.Status(http.StatusBadRequest)
+			log.Println(err)
+			c.Status(http.StatusBadRequest)
 			return
 		}
 
 		if !VerifySig(cert, transmissionid, timestamp, webhookid, sig, body) {
-      log.Println("Didn't Verify")
-      c.Status(http.StatusBadRequest)
+			log.Println("Didn't Verify")
+			c.Status(http.StatusBadRequest)
 			return
 		}
 
-    var we WebHookEvent
-    json.Unmarshal(body, &we)
-    log.Println(we)
+		var we WebHookEvent
+		json.Unmarshal(body, &we)
+
+		switch we.ResourceType {
+		case "payment":
+			handlePayment(db, &we)
+		case "sale":
+		}
 
 		c.Status(http.StatusOK)
 	}
+}
+
+func handlePayment(db *gorm.DB, we *WebHookEvent) {
+	res := we.Resource.(*Payment)
+
+	db.Save(res)
 }
 
 // GetCert retrieves the PEM certificate using the URL that was provided

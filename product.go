@@ -10,7 +10,8 @@ import (
 
 // Product represents a specific Type of tickets sold
 type Product struct {
-	ID          uint       `json:"id"`
+	ID          uint       `json:"id" gorm:"primary_key"`
+	MerchantID  string     `json:"-" gorm:"type:varchar;not null;primary_key;"`
 	CreatedAt   time.Time  `json:"-"`
 	UpdatedAt   time.Time  `json:"-"`
 	DeletedAt   *time.Time `json:"-"`
@@ -31,6 +32,7 @@ func SaveProduct(db *gorm.DB) gin.HandlerFunc {
 			return
 		}
 
+		inprod.MerchantID = c.Param("merchantid")
 		db.Save(&inprod)
 	}
 }

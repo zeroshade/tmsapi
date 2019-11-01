@@ -23,7 +23,8 @@ func main() {
 		log.Fatal(err)
 	}
 	defer db.Close()
-	db.AutoMigrate(&Product{}, &Schedule{}, &ScheduleTime{}, &NotAvail{}, &TicketCategory{})
+	db.AutoMigrate(&Product{}, &Schedule{}, &ScheduleTime{}, &NotAvail{}, &TicketCategory{},
+		&Transaction{}, &Payment{}, &Sale{})
 	db.Model(&Schedule{}).Association("TimeArray")
 	db.Model(&Schedule{}).Association("NotAvail")
 
@@ -44,15 +45,17 @@ func main() {
 	router.Use(gin.Logger())
 	router.Use(cors.New(config))
 
-	router.GET("/", func(c *gin.Context) {
+	merchant := router.Group("/info/:merchantid")
+
+	merchant.GET("/", func(c *gin.Context) {
 		var prods []Product
-		db.Preload("Schedules").Preload("Schedules.TimeArray").Find(&prods)
+		db.Preload("Schedules").Preload("Schedules.TimeArray").Find(&prods, "merchant_id = ?", c.Param("merchantid"))
 		c.JSON(http.StatusOK, prods)
 	})
 
-	router.PUT("/product", SaveProduct(db))
-	router.PUT("/tickets", SaveTicketCats(db))
-	router.GET("/tickets", GetTicketCats(db))
-  router.POST("/paypal", HandlePaypalWebhook())
+	merchant.PUT("/product", SaveProduct(db))
+	merchant.PUT("/tickets", SaveTicketCats(db))
+	merchant.GET("/tickets", GetTicketCats(db))
+	router.POST("/paypal", HandlePaypalWebhook(db))
 	router.Run(":" + port)
 }
