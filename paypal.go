@@ -213,15 +213,18 @@ func HandlePaypalWebhook(db *gorm.DB) gin.HandlerFunc {
 			return
 		}
 
+		var we WebHookEvent
+		json.Unmarshal(body, &we)
+
 		if !VerifySig(cert, transmissionid, timestamp, webhookid, sig, body) {
 			log.Println("Didn't Verify")
+			we.Status = "No Verify"
+			db.Save(&we)
+
 			c.Status(http.StatusBadRequest)
 			return
 		}
 
-		var we WebHookEvent
-		json.Unmarshal(body, &we)
-		log.Println("WebHookStatus: ", we.Status)
 		db.Save(&we)
 
 		switch we.ResourceType {
