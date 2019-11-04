@@ -36,29 +36,34 @@ type cutime struct {
 }
 
 type PayerInfo struct {
+	ID        string `json:"payer_id" gorm:"primary_key"`
 	Email     string `json:"email"`
 	FirstName string `json:"first_name"`
 	LastName  string `json:"last_name"`
-	PayerID   string `json:"payer_id" gorm:"primary_key"`
 	Phone     string `json:"phone"`
 	Country   string `json:"country_code"`
 }
 
 type WebHookEvent struct {
-	ID            string    `json:"id"`
-	CreateTime    time.Time `json:"create_time"`
-	ResourceType  string    `json:"resource_type"`
-	EventType     string    `json:"event_type"`
-	Summary       string    `json:"summary"`
-	Resource      interface{}
-	Status        string `json:"status"`
+	ID            string      `json:"id" gorm:"primary_key"`
+	CreateTime    time.Time   `json:"create_time"`
+	UpdatedAt     time.Time   `json:"-"`
+	ResourceType  string      `json:"resource_type"`
+	EventType     string      `json:"event_type"`
+	Summary       string      `json:"summary"`
+	Resource      interface{} `gorm:"-"`
+	Status        string      `json:"status"`
 	Transmissions []struct {
 		WebhookURL     string `json:"webhook_url"`
 		TransmissionID string `json:"transmission_id"`
 		Status         string `json:"status"`
-	} `json:"transmissions"`
-	Links        []link `json:"links"`
-	EventVersion string `json:"event_version"`
+	} `json:"transmissions" gorm:"-"`
+	Links        []link  `json:"links" gorm:"-"`
+	EventVersion float32 `json:"event_version,string"`
+}
+
+func (WebHookEvent) TableName() string {
+	return "webhook_logs"
 }
 
 func (w *WebHookEvent) UnmarshalJSON(data []byte) error {
@@ -93,10 +98,9 @@ type item struct {
 }
 
 type Transaction struct {
-	TransactionID uint   `json:"-" gorm:"primary_key"`
-	PaymentID     string `json:"-"`
-	Amount        amount `json:"amount" gorm:"embedded"`
-	Payee         struct {
+	PaymentID string `json:"-" gorm:"primary_key"`
+	Amount    amount `json:"amount" gorm:"embedded"`
+	Payee     struct {
 		MerchantID string `json:"merchant_id"`
 		Email      string `json:"email"`
 	} `json:"payee" gorm:"embedded;embedded_prefix:payee_"`
@@ -107,6 +111,7 @@ type Transaction struct {
 	} `json:"item_list" gorm:"-"`
 
 	RelatedResources []interface{} `gorm:"-"`
+	Sales            []Sale        `json:"-" gorm:"many2many:transaction_related;"`
 }
 
 func (t *Transaction) UnmarshalJSON(data []byte) error {
@@ -148,7 +153,7 @@ type Payment struct {
 	Payer        struct {
 		PaymentMethod string    `json:"payment_method"`
 		Status        string    `json:"status"`
-		PayerID       string    `json:"-"`
+		PayerInfoID   string    `json:"-"`
 		PayerInfo     PayerInfo `json:"payer_info"`
 	} `json:"payer" gorm:"embedded"`
 	CartID string `json:"cart"`
@@ -163,12 +168,13 @@ type Sale struct {
 		Value    float32 `json:"value,string" gorm:"column:transaction_fee"`
 		Currency string  `json:"currency" gorm:"-"`
 	} `json:"transaction_fee" gorm:"embedded"`
-	ParentPayment   string `json:"parent_payment"`
-	SoftDesc        string `json:"soft_descriptor"`
-	ProtectEligible string `json:"protection_eligibility"`
-	Links           []link `json:"links"`
-	State           string `json:"state"`
-	InvoiceNum      string `json:"invoice_number"`
+	ParentPayment   string        `json:"parent_payment"`
+	SoftDesc        string        `json:"soft_descriptor"`
+	ProtectEligible string        `json:"protection_eligibility"`
+	Links           []link        `json:"links"`
+	State           string        `json:"state"`
+	InvoiceNum      string        `json:"invoice_number"`
+	RelatedTrans    []Transaction `json:"-" gorm:"many2many:transaction_related"`
 }
 
 // WebhookID is the constant id from PayPal for this webhook
@@ -213,10 +219,13 @@ func HandlePaypalWebhook(db *gorm.DB) gin.HandlerFunc {
 		var we WebHookEvent
 		json.Unmarshal(body, &we)
 
+		db.Save(&we)
+
 		switch we.ResourceType {
 		case "payment":
 			handlePayment(db, &we)
 		case "sale":
+			handleSale(db, &we)
 		}
 
 		c.Status(http.StatusOK)
@@ -225,6 +234,25 @@ func HandlePaypalWebhook(db *gorm.DB) gin.HandlerFunc {
 
 func handlePayment(db *gorm.DB, we *WebHookEvent) {
 	res := we.Resource.(*Payment)
+
+	for idx, t := range res.Transactions {
+		for _, r := range t.RelatedResources {
+			switch related := r.(type) {
+			case *Sale:
+				res.Transactions[idx].Sales = append(t.Sales, *related)
+			case *Payment:
+				log.Println("Payment: ", related)
+			default:
+				log.Println("Wtf! ", related)
+			}
+		}
+	}
+
+	db.Save(res)
+}
+
+func handleSale(db *gorm.DB, we *WebHookEvent) {
+	res := we.Resource.(*Sale)
 
 	db.Save(res)
 }

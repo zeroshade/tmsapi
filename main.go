@@ -24,9 +24,10 @@ func main() {
 	}
 	defer db.Close()
 	db.AutoMigrate(&Product{}, &Schedule{}, &ScheduleTime{}, &NotAvail{}, &TicketCategory{},
-		&Transaction{}, &Payment{}, &Sale{}, &PayerInfo{})
+		&Transaction{}, &Payment{}, &Sale{}, &PayerInfo{}, &WebHookEvent{})
 	db.Model(&Schedule{}).Association("TimeArray")
 	db.Model(&Schedule{}).Association("NotAvail")
+	db.Model(&Payment{}).Association("Payer.PayerInfo")
 
 	if err := db.Exec("CREATE EXTENSION IF NOT EXISTS hstore").Error; err != nil {
 		log.Fatal(err)
