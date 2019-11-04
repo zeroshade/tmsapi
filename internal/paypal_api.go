@@ -128,6 +128,8 @@ func (c *Client) VerifyWebHookSig(req *http.Request, webhookID string) bool {
 		return false
 	}
 
+	log.Println(string(b))
+
 	vreq, err := http.NewRequest("POST", c.APIBase+"/v1/notifications/verify-webhook-signature", bytes.NewBuffer(b))
 	resp, err := c.SendWithAuth(vreq)
 
@@ -139,5 +141,6 @@ func (c *Client) VerifyWebHookSig(req *http.Request, webhookID string) bool {
 		return false
 	}
 
+	log.Println(verifyResponse)
 	return verifyResponse.Status == "SUCCESS"
 }
