@@ -4,6 +4,10 @@ import (
 	"log"
 	"net/http"
 	"os"
+  "os/signal"
+  "syscall"
+  "time"
+  "context"
 
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
@@ -58,5 +62,31 @@ func main() {
 	merchant.PUT("/tickets", SaveTicketCats(db))
 	merchant.GET("/tickets", GetTicketCats(db))
 	router.POST("/paypal", HandlePaypalWebhook(db))
-	router.Run(":" + port)
+
+  srv := &http.Server{
+    Addr: ":" + port,
+    Handler: router,
+  }
+
+  go func() {
+    if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+      log.Fatalf("listen: %s\n", err)
+    }
+  }()
+
+  // Wait for interrupt signal to gracefully shutdown the server with a timeout of 20 seconds
+  quit := make(chan os.Signal, 1)
+  // kill (no param) default send syscall.SIGTERM
+  // kill -2 is syscall.SIGINT
+  // kill -9 is syscall.SIGKILL but you can't catch that
+  signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+  <-quit
+  log.Println("Shutting down server...")
+
+  ctx, cancel := context.WithTimeout(context.Background(), 20 * time.Second)
+  defer cancel()
+  if err := srv.Shutdown(ctx); err != nil {
+    log.Fatal("Server Shutdown: ", err)
+  }
+  log.Println("Server Exiting")
 }
