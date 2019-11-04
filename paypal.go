@@ -19,7 +19,7 @@ import (
 )
 
 type amount struct {
-	Total    float32 `json:"total,string"`
+	Total    float32 `json:"total,string" gorm:"type:money"`
 	Currency string  `json:"currency" gorm:"-"`
 }
 
@@ -30,7 +30,7 @@ type link struct {
 	EncType string `json:"encType"`
 }
 
-type cutime struct {
+type CUTime struct {
 	UpdateTime time.Time `json:"update_time"`
 	CreateTime time.Time `json:"create_time"`
 }
@@ -144,7 +144,7 @@ func (t *Transaction) UnmarshalJSON(data []byte) error {
 }
 
 type Payment struct {
-	cutime
+	CUTime
 	ID           string        `json:"id" gorm:"primary_key"`
 	Links        []link        `json:"links"`
 	State        string        `json:"state"`
@@ -160,12 +160,12 @@ type Payment struct {
 }
 
 type Sale struct {
-	cutime
+	CUTime
 	ID             string `json:"id" gorm:"primary_key"`
 	Amount         amount `json:"amount" gorm:"embedded"`
 	PaymentMode    string `json:"payment_mode"`
 	TransactionFee struct {
-		Value    float32 `json:"value,string" gorm:"column:transaction_fee"`
+		Value    float32 `json:"value,string" gorm:"column:transaction_fee;type:money"`
 		Currency string  `json:"currency" gorm:"-"`
 	} `json:"transaction_fee" gorm:"embedded"`
 	ParentPayment   string        `json:"parent_payment"`
