@@ -16,6 +16,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/jinzhu/gorm"
+	"github.com/jinzhu/gorm/dialects/postgres"
 )
 
 type amount struct {
@@ -58,8 +59,9 @@ type WebHookEvent struct {
 		TransmissionID string `json:"transmission_id"`
 		Status         string `json:"status"`
 	} `json:"transmissions" gorm:"-"`
-	Links        []link  `json:"links" gorm:"-"`
-	EventVersion float32 `json:"event_version,string"`
+	Links        []link         `json:"links" gorm:"-"`
+	EventVersion float32        `json:"event_version,string"`
+	RawMessage   postgres.Jsonb `json:"-"`
 }
 
 func (WebHookEvent) TableName() string {
@@ -85,6 +87,7 @@ func (w *WebHookEvent) UnmarshalJSON(data []byte) error {
 		aux.Resource = new(Payment)
 	}
 
+	w.RawMessage = postgres.Jsonb{json.RawMessage(data)}
 	return json.Unmarshal(*aux.RawResource, aux.Resource)
 }
 
@@ -218,7 +221,7 @@ func HandlePaypalWebhook(db *gorm.DB) gin.HandlerFunc {
 
 		var we WebHookEvent
 		json.Unmarshal(body, &we)
-
+		log.Println("WebHookStatus: ", we.Status)
 		db.Save(&we)
 
 		switch we.ResourceType {
