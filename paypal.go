@@ -17,6 +17,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/jinzhu/gorm"
 	"github.com/jinzhu/gorm/dialects/postgres"
+	"github.com/zeroshade/tmsapi/internal"
 )
 
 type amount struct {
@@ -191,12 +192,22 @@ func init() {
 // post request and then processes the event message
 func HandlePaypalWebhook(db *gorm.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		sig := c.GetHeader("PAYPAL-TRANSMISSION-SIG")
-		certurl := c.GetHeader("PAYPAL-CERT-URL")
+		paypalClient := internal.NewClient(internal.SANDBOX)
+		verified := paypalClient.VerifyWebHookSig(c.Request, WebhookID)
 
-		transmissionid := c.GetHeader("PAYPAL-TRANSMISSION-ID")
-		timestamp := c.GetHeader("PAYPAL-TRANSMISSION-TIME")
-		webhookid := WebhookID
+		// sig := c.GetHeader("PAYPAL-TRANSMISSION-SIG")
+		// certurl := c.GetHeader("PAYPAL-CERT-URL")
+		// authAlg := c.GetHeader("PAYPAL-AUTH-ALGO")
+		// transmissionid := c.GetHeader("PAYPAL-TRANSMISSION-ID")
+		// timestamp := c.GetHeader("PAYPAL-TRANSMISSION-TIME")
+		// webhookid := WebhookID
+
+		// if !VerifySig(cert, transmissionid, timestamp, webhookid, sig, body) {
+		if !verified {
+			log.Println("Didn't Verify")
+			c.Status(http.StatusBadRequest)
+			return
+		}
 
 		defer c.Request.Body.Close()
 		body, err := ioutil.ReadAll(c.Request.Body)
@@ -206,24 +217,15 @@ func HandlePaypalWebhook(db *gorm.DB) gin.HandlerFunc {
 			return
 		}
 
-		cert, err := GetCert(certurl)
-		if err != nil {
-			log.Println(err)
-			c.Status(http.StatusBadRequest)
-			return
-		}
+		// cert, err := GetCert(certurl)
+		// if err != nil {
+		// 	log.Println(err)
+		// 	c.Status(http.StatusBadRequest)
+		// 	return
+		// }
 
 		var we WebHookEvent
 		json.Unmarshal(body, &we)
-
-		if !VerifySig(cert, transmissionid, timestamp, webhookid, sig, body) {
-			log.Println("Didn't Verify")
-			we.Status = "No Verify"
-			db.Save(&we)
-
-			c.Status(http.StatusBadRequest)
-			return
-		}
 
 		db.Save(&we)
 
