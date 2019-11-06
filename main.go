@@ -1,13 +1,13 @@
 package main
 
 import (
+	"context"
 	"log"
 	"net/http"
 	"os"
-  "os/signal"
-  "syscall"
-  "time"
-  "context"
+	"os/signal"
+	"syscall"
+	"time"
 
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
@@ -28,10 +28,15 @@ func main() {
 	}
 	defer db.Close()
 	db.AutoMigrate(&Product{}, &Schedule{}, &ScheduleTime{}, &NotAvail{}, &TicketCategory{},
-		&Transaction{}, &Payment{}, &Sale{}, &PayerInfo{}, &WebHookEvent{})
+		&Transaction{}, &Payment{}, &Sale{}, &PayerInfo{}, &WebHookEvent{}, &Item{})
 	db.Model(&Schedule{}).Association("TimeArray")
 	db.Model(&Schedule{}).Association("NotAvail")
 	db.Model(&Payment{}).Association("Payer.PayerInfo")
+	db.Model(&Item{}).AddForeignKey("transaction", "transactions(payment_id)", "CASCADE", "RESTRICT")
+	db.Model(&Transaction{}).AddForeignKey("payment_id", "payments(id)", "CASCADE", "RESTRICT")
+	db.Model(&Sale{}).AddForeignKey("parent_payment", "payments(id)", "CASCADE", "RESTRICT")
+	db.Table("transaction_related").AddForeignKey("transaction_payment_id", "payments(id)", "CASCADE", "RESTRICT")
+	db.Table("transaction_related").AddForeignKey("sale_id", "sales(id)", "CASCADE", "RESTRICT")
 
 	if err := db.Exec("CREATE EXTENSION IF NOT EXISTS hstore").Error; err != nil {
 		log.Fatal(err)
@@ -62,31 +67,32 @@ func main() {
 	merchant.PUT("/tickets", SaveTicketCats(db))
 	merchant.GET("/tickets", GetTicketCats(db))
 	router.POST("/paypal", HandlePaypalWebhook(db))
+	router.GET("/transaction/:transaction", GetItems(db))
 
-  srv := &http.Server{
-    Addr: ":" + port,
-    Handler: router,
-  }
+	srv := &http.Server{
+		Addr:    ":" + port,
+		Handler: router,
+	}
 
-  go func() {
-    if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-      log.Fatalf("listen: %s\n", err)
-    }
-  }()
+	go func() {
+		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			log.Fatalf("listen: %s\n", err)
+		}
+	}()
 
-  // Wait for interrupt signal to gracefully shutdown the server with a timeout of 20 seconds
-  quit := make(chan os.Signal, 1)
-  // kill (no param) default send syscall.SIGTERM
-  // kill -2 is syscall.SIGINT
-  // kill -9 is syscall.SIGKILL but you can't catch that
-  signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
-  <-quit
-  log.Println("Shutting down server...")
+	// Wait for interrupt signal to gracefully shutdown the server with a timeout of 20 seconds
+	quit := make(chan os.Signal, 1)
+	// kill (no param) default send syscall.SIGTERM
+	// kill -2 is syscall.SIGINT
+	// kill -9 is syscall.SIGKILL but you can't catch that
+	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+	<-quit
+	log.Println("Shutting down server...")
 
-  ctx, cancel := context.WithTimeout(context.Background(), 20 * time.Second)
-  defer cancel()
-  if err := srv.Shutdown(ctx); err != nil {
-    log.Fatal("Server Shutdown: ", err)
-  }
-  log.Println("Server Exiting")
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	if err := srv.Shutdown(ctx); err != nil {
+		log.Fatal("Server Shutdown: ", err)
+	}
+	log.Println("Server Exiting")
 }

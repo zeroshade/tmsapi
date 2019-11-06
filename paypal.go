@@ -15,8 +15,8 @@ import (
 )
 
 type amount struct {
-	Total    float32 `json:"total,string" gorm:"type:money"`
-	Currency string  `json:"currency" gorm:"-"`
+	Total    string `json:"total" gorm:"type:money"`
+	Currency string `json:"currency" gorm:"-"`
 }
 
 type link struct {
@@ -86,13 +86,14 @@ func (w *WebHookEvent) UnmarshalJSON(data []byte) error {
 	return json.Unmarshal(*aux.RawResource, aux.Resource)
 }
 
-type item struct {
-	Name     string  `json:"name"`
-	Sku      string  `json:"sku"`
-	Price    float32 `json:"price,string"`
-	Currency string  `json:"currency"`
-	Tax      float32 `json:"tax,string"`
-	Qty      uint32  `json:"quantity"`
+type Item struct {
+	Transaction string `json:"-" gorm:"primary_key"`
+	Name        string `json:"name"`
+	Sku         string `json:"sku" gorm:"primary_key"`
+	Price       string `json:"price" gorm:"type:money"`
+	Currency    string `json:"currency"`
+	Tax         string `json:"tax" gorm:"type:money"`
+	Qty         uint32 `json:"quantity"`
 }
 
 type Transaction struct {
@@ -105,11 +106,11 @@ type Transaction struct {
 	Desc     string `json:"description"`
 	SoftDesc string `json:"soft_descriptor"`
 	ItemList struct {
-		Items []item `json:"items"`
+		Items []Item `json:"items"`
 	} `json:"item_list" gorm:"-"`
 
 	RelatedResources []interface{} `gorm:"-"`
-	Sales            []Sale        `json:"-" gorm:"many2many:transaction_related;"`
+	Sales            []*Sale       `json:"-" gorm:"many2many:transaction_related;"`
 }
 
 func (t *Transaction) UnmarshalJSON(data []byte) error {
@@ -163,16 +164,16 @@ type Sale struct {
 	Amount         amount `json:"amount" gorm:"embedded"`
 	PaymentMode    string `json:"payment_mode"`
 	TransactionFee struct {
-		Value    float32 `json:"value,string" gorm:"column:transaction_fee;type:money"`
-		Currency string  `json:"currency" gorm:"-"`
+		Value    string `json:"value" gorm:"column:transaction_fee;type:money"`
+		Currency string `json:"currency" gorm:"-"`
 	} `json:"transaction_fee" gorm:"embedded"`
-	ParentPayment   string        `json:"parent_payment"`
-	SoftDesc        string        `json:"soft_descriptor"`
-	ProtectEligible string        `json:"protection_eligibility"`
-	Links           []link        `json:"links"`
-	State           string        `json:"state"`
-	InvoiceNum      string        `json:"invoice_number"`
-	RelatedTrans    []Transaction `json:"-" gorm:"many2many:transaction_related"`
+	ParentPayment   string         `json:"parent_payment"`
+	SoftDesc        string         `json:"soft_descriptor"`
+	ProtectEligible string         `json:"protection_eligibility"`
+	Links           []link         `json:"links"`
+	State           string         `json:"state"`
+	InvoiceNum      string         `json:"invoice_number"`
+	RelatedTrans    []*Transaction `json:"-" gorm:"many2many:transaction_related"`
 }
 
 // WebhookID is the constant id from PayPal for this webhook
@@ -180,6 +181,17 @@ var WebhookID string
 
 func init() {
 	WebhookID = os.Getenv("WEBHOOK_ID")
+}
+
+func GetItems(db *gorm.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		t := Transaction{PaymentID: c.Param("transaction")}
+		db.Find(&t)
+
+		var items []Item
+		db.Find(&items, "transaction = ?", t.PaymentID)
+		c.JSON(http.StatusOK, items)
+	}
 }
 
 // HandlePaypalWebhook returns a handler function that verifies a paypal webhook
@@ -207,39 +219,27 @@ func HandlePaypalWebhook(db *gorm.DB) gin.HandlerFunc {
 		json.Unmarshal(body, &we)
 
 		db.Save(&we)
-
-		switch we.ResourceType {
-		case "payment":
-			handlePayment(db, &we)
-		case "sale":
-			handleSale(db, &we)
-		}
+		db.Save(we.Resource)
 
 		c.Status(http.StatusOK)
 	}
 }
 
-func handlePayment(db *gorm.DB, we *WebHookEvent) {
-	res := we.Resource.(*Payment)
-
-	for idx, t := range res.Transactions {
-		for _, r := range t.RelatedResources {
-			switch related := r.(type) {
-			case *Sale:
-				res.Transactions[idx].Sales = append(t.Sales, *related)
-			case *Payment:
-				log.Println("Payment: ", related)
-			default:
-				log.Println("Wtf! ", related)
-			}
+func (t *Transaction) BeforeSave() error {
+	for _, r := range t.RelatedResources {
+		switch related := r.(type) {
+		case *Sale:
+			t.Sales = append(t.Sales, related)
 		}
 	}
-
-	db.Save(res)
+	return nil
 }
 
-func handleSale(db *gorm.DB, we *WebHookEvent) {
-	res := we.Resource.(*Sale)
+func (t *Transaction) AfterCreate(tx *gorm.DB) error {
+	for idx := range t.ItemList.Items {
+		t.ItemList.Items[idx].Transaction = t.PaymentID
 
-	db.Save(res)
+		tx.Save(&t.ItemList.Items[idx])
+	}
+	return nil
 }
