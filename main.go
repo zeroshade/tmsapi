@@ -34,7 +34,6 @@ func main() {
 	db.Model(&Payment{}).Association("Payer.PayerInfo")
 	db.Model(&Item{}).AddForeignKey("transaction", "transactions(payment_id)", "CASCADE", "RESTRICT")
 	db.Model(&Transaction{}).AddForeignKey("payment_id", "payments(id)", "CASCADE", "RESTRICT")
-	db.Model(&Sale{}).AddForeignKey("parent_payment", "payments(id)", "CASCADE", "RESTRICT")
 	db.Table("transaction_related").AddForeignKey("transaction_payment_id", "payments(id)", "CASCADE", "RESTRICT")
 	db.Table("transaction_related").AddForeignKey("sale_id", "sales(id)", "CASCADE", "RESTRICT")
 

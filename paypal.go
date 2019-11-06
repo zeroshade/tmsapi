@@ -219,8 +219,18 @@ func HandlePaypalWebhook(db *gorm.DB) gin.HandlerFunc {
 		json.Unmarshal(body, &we)
 
 		db.Save(&we)
-		db.Save(we.Resource)
 
+		p, ok := we.Resource.(*Payment)
+		if ok {
+			count := 0
+			db.Model(&Payment{}).Where("id = ?", p.ID).Count(&count)
+			if count <= 0 {
+				db.Create(we.Resource)
+				c.Status(http.StatusOK)
+				return
+			}
+		}
+		db.Save(we.Resource)
 		c.Status(http.StatusOK)
 	}
 }
