@@ -19,6 +19,18 @@ type amount struct {
 	Currency string `json:"currency" gorm:"-"`
 }
 
+type Amount struct {
+	Value        string `json:"value" gorm:"type:money"`
+	CurrencyCode string `json:"currency_code" gorm:"-"`
+}
+
+type Breakdown struct {
+	Amount
+	Breakdown struct {
+		ItemTotal Amount `json:"item_total" gorm:"embedded;embedded_prefix:item_"`
+	} `json:"breakdown" gorm:"embedded"`
+}
+
 type link struct {
 	Href    string `json:"href"`
 	Rel     string `json:"rel"`
@@ -80,6 +92,10 @@ func (w *WebHookEvent) UnmarshalJSON(data []byte) error {
 		aux.Resource = new(Sale)
 	case "payment":
 		aux.Resource = new(Payment)
+	case "checkout-order":
+		aux.Resource = new(CheckoutOrder)
+	case "capture":
+		aux.Resource = new(Capture)
 	}
 
 	w.RawMessage = postgres.Jsonb{json.RawMessage(data)}
@@ -139,6 +155,83 @@ func (t *Transaction) UnmarshalJSON(data []byte) error {
 		}
 	}
 
+	return nil
+}
+
+type Payer struct {
+	ID   string `json:"payer_id" gorm:"primary_key"`
+	Name struct {
+		GivenName string `json:"given_name"`
+		Surname   string `json:"surname"`
+	} `json:"name" gorm:"embedded"`
+	Email   string `json:"email_address"`
+	Address struct {
+		CountryCode string `json:"country_code"`
+	} `json:"address" gorm:"-"`
+}
+
+type PurchaseItem struct {
+	CheckoutID  string `json:"-" gorm:"primary_key"`
+	Sku         string `json:"sku" gorm:"primary_key"`
+	Name        string `json:"name"`
+	Amount      Amount `json:"unit_amount" gorm:"embedded"`
+	Quantity    uint   `json:"quantity,string"`
+	Description string `json:"description"`
+}
+
+type PurchaseUnit struct {
+	CheckoutID string    `json:"-" gorm:"primary_key"`
+	RefID      string    `json:"reference_id"`
+	Amount     Breakdown `json:"amount" gorm:"embedded"`
+	Payee      struct {
+		MerchantID string `json:"merchant_id"`
+		Email      string `json:"email_address"`
+	} `json:"payee" gorm:"embedded;embedded_prefix:payee_"`
+	Description string         `json:"description"`
+	Items       []PurchaseItem `json:"items" gorm:"foriegnkey:CheckoutID;association_foreignkey:CheckoutID"`
+	Payments    struct {
+		Captures []*Capture `json:"captures" gorm:"many2many:capture_purchaseunit"`
+	} `json:"payments" gorm:"embedded"`
+}
+
+type Capture struct {
+	CUTime
+	ID               string `json:"id" gorm:"primary_key"`
+	Status           string `json:"status"`
+	Amount           Amount `json:"amount" gorm:"embedded"`
+	FinalCapture     bool   `json:"final_capture" gorm:"-"`
+	SellerProtection struct {
+		Status            string   `json:"string"`
+		DisputeCategories []string `json:"dispute_categories"`
+	} `json:"seller_protection" gorm:"-"`
+	Receivable struct {
+		GrossAmount Amount `json:"gross_amount" gorm:"embedded;embedded_prefix:gross_"`
+		PaypalFee   Amount `json:"paypal_fee" gorm:"embedded;embedded_prefix:paypal_fee_"`
+		NetAmount   Amount `json:"net_amount" gorm:"embedded;embedded_prefix:net_"`
+	} `json:"seller_receivable_breakdown" gorm:"embedded"`
+	Links []link `json:"links"`
+}
+
+type CheckoutOrder struct {
+	CUTime
+	ID            string         `json:"id" gorm:"primary_key"`
+	PurchaseUnits []PurchaseUnit `json:"purchase_units"`
+	Links         []link         `json:"links"`
+	Intent        string         `json:"intent"`
+	PayerID       string         `json:"-"`
+	Payer         *Payer         `json:"payer"`
+	Status        string         `json:"status"`
+}
+
+func (c *CheckoutOrder) AfterCreate(tx *gorm.DB) error {
+	for p := range c.PurchaseUnits {
+		c.PurchaseUnits[p].CheckoutID = c.ID
+		for idx := range c.PurchaseUnits[p].Items {
+			c.PurchaseUnits[p].Items[idx].CheckoutID = c.ID
+			tx.Save(&c.PurchaseUnits[p].Items[idx])
+		}
+		tx.Save(&c.PurchaseUnits[p])
+	}
 	return nil
 }
 
