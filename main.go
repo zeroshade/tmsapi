@@ -27,7 +27,7 @@ func main() {
 		log.Fatal(err)
 	}
 	defer db.Close()
-	db.AutoMigrate(&Product{}, &Schedule{}, &ScheduleTime{}, &NotAvail{}, &TicketCategory{},
+	db.AutoMigrate(&Product{}, &Schedule{}, &ScheduleTime{}, &TicketCategory{},
 		&Transaction{}, &Payment{}, &Sale{}, &PayerInfo{}, &WebHookEvent{}, &Item{},
 		&CheckoutOrder{}, &Payer{}, &PurchaseItem{}, &PurchaseUnit{}, &Capture{})
 	db.Model(&Schedule{}).Association("TimeArray")
@@ -43,6 +43,8 @@ func main() {
 	if err := db.Exec("CREATE EXTENSION IF NOT EXISTS hstore").Error; err != nil {
 		log.Fatal(err)
 	}
+
+	db.Exec("SET TIME ZONE 'America/New_York'")
 
 	port := os.Getenv("PORT")
 	if port == "" {
@@ -68,6 +70,28 @@ func main() {
 	merchant.PUT("/product", SaveProduct(db))
 	merchant.PUT("/tickets", SaveTicketCats(db))
 	merchant.GET("/tickets", GetTicketCats(db))
+	merchant.GET("/schedule/:from/:to", func(c *gin.Context) {
+		type result struct {
+			Stamp time.Time `json:"stamp"`
+			Qty   uint      `json:"qty"`
+		}
+
+		sub := db.Model(&PurchaseItem{}).
+			Select([]string{"checkout_id",
+				"TO_TIMESTAMP(LEFT(RIGHT(sku, 13), -3)::INTEGER) as tm",
+				"SUM(quantity) as q"}).Group("checkout_id, tm").SubQuery()
+
+		var out []result
+		db.Table("purchase_units as pu").
+			Select("tm as stamp, sum(q) as qty").
+			Joins("RIGHT JOIN ? as sub ON pu.checkout_id = sub.checkout_id", sub).
+			Where("pu.payee_merchant_id = ? AND tm BETWEEN TO_TIMESTAMP(?) AND TO_TIMESTAMP(?)",
+				c.Param("merchantid"), c.Param("from"), c.Param("to")).
+			Group("tm").Scan(&out)
+
+		c.JSON(http.StatusOK, out)
+	})
+
 	router.POST("/paypal", HandlePaypalWebhook(db))
 	router.GET("/transaction/:transaction", GetItems(db))
 
