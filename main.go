@@ -61,36 +61,19 @@ func main() {
 
 	merchant := router.Group("/info/:merchantid")
 
-	merchant.GET("/", func(c *gin.Context) {
+	merchant.GET("/", checkJWT(), func(c *gin.Context) {
 		var prods []Product
 		db.Preload("Schedules").Preload("Schedules.TimeArray").Find(&prods, "merchant_id = ?", c.Param("merchantid"))
 		c.JSON(http.StatusOK, prods)
 	})
 
-	merchant.PUT("/product", SaveProduct(db))
-	merchant.PUT("/tickets", SaveTicketCats(db))
+	merchant.PUT("/product", checkJWT(), SaveProduct(db))
+	merchant.PUT("/tickets", checkJWT(), SaveTicketCats(db))
 	merchant.GET("/tickets", GetTicketCats(db))
-	merchant.GET("/schedule/:from/:to", func(c *gin.Context) {
-		type result struct {
-			Stamp time.Time `json:"stamp"`
-			Qty   uint      `json:"qty"`
-		}
-
-		sub := db.Model(&PurchaseItem{}).
-			Select([]string{"checkout_id",
-				"TO_TIMESTAMP(LEFT(RIGHT(sku, 13), -3)::INTEGER) as tm",
-				"SUM(quantity) as q"}).Group("checkout_id, tm").SubQuery()
-
-		var out []result
-		db.Table("purchase_units as pu").
-			Select("tm as stamp, sum(q) as qty").
-			Joins("RIGHT JOIN ? as sub ON pu.checkout_id = sub.checkout_id", sub).
-			Where("pu.payee_merchant_id = ? AND tm BETWEEN TO_TIMESTAMP(?) AND TO_TIMESTAMP(?)",
-				c.Param("merchantid"), c.Param("from"), c.Param("to")).
-			Group("tm").Scan(&out)
-
-		c.JSON(http.StatusOK, out)
-	})
+	merchant.GET("/schedule/:from/:to", GetSoldTickets(db))
+	merchant.GET("/users", checkJWT(), getUsers())
+	merchant.POST("/user", checkJWT(), createUser())
+	merchant.DELETE("/user/:userid", checkJWT(), deleteUser())
 
 	router.POST("/paypal", HandlePaypalWebhook(db))
 	router.GET("/transaction/:transaction", GetItems(db))

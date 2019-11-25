@@ -5,6 +5,7 @@ module github.com/zeroshade/tmsapi
 go 1.12
 
 require (
+	github.com/auth0-community/go-auth0 v1.0.0
 	github.com/denisenkom/go-mssqldb v0.0.0-20191001013358-cfbb681360f0 // indirect
 	github.com/gin-contrib/cors v1.3.0
 	github.com/gin-gonic/gin v1.4.0
