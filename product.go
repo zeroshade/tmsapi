@@ -36,3 +36,11 @@ func SaveProduct(db *gorm.DB) gin.HandlerFunc {
 		db.Save(&inprod)
 	}
 }
+
+func GetProducts(db *gorm.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		var prods []Product
+		db.Preload("Schedules").Preload("Schedules.TimeArray").Find(&prods, "merchant_id = ?", c.Param("merchantid"))
+		c.JSON(http.StatusOK, prods)
+	}
+}

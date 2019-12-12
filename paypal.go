@@ -21,7 +21,7 @@ type amount struct {
 
 type Amount struct {
 	Value        string `json:"value" gorm:"type:money"`
-	CurrencyCode string `json:"currency_code" gorm:"-"`
+	CurrencyCode string `json:"currency_code,omitempty" gorm:"-"`
 }
 
 type Breakdown struct {
@@ -190,13 +190,14 @@ type PurchaseUnit struct {
 	Description string         `json:"description"`
 	Items       []PurchaseItem `json:"items" gorm:"foriegnkey:CheckoutID;association_foreignkey:CheckoutID"`
 	Payments    struct {
-		Captures []*Capture `json:"captures" gorm:"many2many:capture_purchaseunit"`
+		Captures []*Capture `json:"captures" gorm:"foreignkey:CheckoutID;association_foreignkey:CheckoutID"`
 	} `json:"payments" gorm:"embedded"`
 }
 
 type Capture struct {
 	CUTime
 	ID               string `json:"id" gorm:"primary_key"`
+	CheckoutID       string `json:"-"`
 	Status           string `json:"status"`
 	Amount           Amount `json:"amount" gorm:"embedded"`
 	FinalCapture     bool   `json:"final_capture" gorm:"-"`

@@ -61,16 +61,12 @@ func main() {
 
 	merchant := router.Group("/info/:merchantid")
 
-	merchant.GET("/", checkJWT(), func(c *gin.Context) {
-		var prods []Product
-		db.Preload("Schedules").Preload("Schedules.TimeArray").Find(&prods, "merchant_id = ?", c.Param("merchantid"))
-		c.JSON(http.StatusOK, prods)
-	})
-
+	merchant.GET("/", GetProducts(db))
 	merchant.PUT("/product", checkJWT(), SaveProduct(db))
 	merchant.PUT("/tickets", checkJWT(), SaveTicketCats(db))
 	merchant.GET("/tickets", GetTicketCats(db))
 	merchant.GET("/schedule/:from/:to", GetSoldTickets(db))
+	merchant.GET("/orders", GetCheckouts(db))
 	merchant.GET("/users", checkJWT(), getUsers())
 	merchant.POST("/user", checkJWT(), createUser())
 	merchant.DELETE("/user/:userid", checkJWT(), deleteUser())

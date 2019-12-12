@@ -2,6 +2,7 @@ package main
 
 import (
 	"net/http"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/jinzhu/gorm"
@@ -37,5 +38,31 @@ func SaveTicketCats(db *gorm.DB) gin.HandlerFunc {
 		for _, c := range cat {
 			db.Save(&c)
 		}
+	}
+}
+
+func TripOnDate(d time.Time) func(db *gorm.DB) *gorm.DB {
+	return func(db *gorm.DB) *gorm.DB {
+		return db.Where("TO_TIMESTAMP(LEFT(RIGHT(sku, 13), -3)::INTEGER) = ?", d)
+	}
+}
+
+func GetCheckouts(db *gorm.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		var orders []*CheckoutOrder
+		var units []PurchaseUnit
+		db.Where("payee_merchant_id = ?", c.Param("merchantid")).Find(&units)
+
+		for idx := range units {
+			db.Where("checkout_id = ?", units[idx].CheckoutID).Find(&units[idx].Payments.Captures)
+			db.Where("checkout_id = ?", units[idx].CheckoutID).Find(&units[idx].Items)
+
+			o := &CheckoutOrder{}
+			db.Preload("Payer").Find(o, "id = ?", units[idx].CheckoutID)
+			o.PurchaseUnits = []PurchaseUnit{units[idx]}
+			orders = append(orders, o)
+		}
+
+		c.JSON(http.StatusOK, orders)
 	}
 }
