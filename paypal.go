@@ -168,6 +168,9 @@ type Payer struct {
 	Address struct {
 		CountryCode string `json:"country_code"`
 	} `json:"address" gorm:"-"`
+	PhoneNumber struct {
+		NationalNumber string `json:"national_number" gorm:"phone_number"`
+	} `json:"phone_number" gorm:"embedded"`
 }
 
 type PurchaseItem struct {
