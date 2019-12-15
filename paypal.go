@@ -194,9 +194,10 @@ type PurchaseUnit struct {
 	} `json:"payments" gorm:"embedded"`
 }
 
-func (pu *PurchaseUnit) BeforeCreate(tx *gorm.DB) error {
+func (pu *PurchaseUnit) AfterCreate(tx *gorm.DB) error {
 	for idx := range pu.Payments.Captures {
 		pu.Payments.Captures[idx].CheckoutID = pu.CheckoutID
+		tx.Save(&pu.Payments.Captures[idx])
 	}
 	return nil
 }
