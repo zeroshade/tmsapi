@@ -65,6 +65,8 @@ func main() {
 	merchant.PUT("/product", checkJWT(), SaveProduct(db))
 	merchant.PUT("/tickets", checkJWT(), SaveTicketCats(db))
 	merchant.GET("/tickets", GetTicketCats(db))
+	merchant.GET("/items/:date", GetPurchases(db))
+	merchant.DELETE("/tickets/:id", checkJWT(), DeleteTicketsCat(db))
 	merchant.GET("/schedule/:from/:to", GetSoldTickets(db))
 	merchant.GET("/orders", GetCheckouts(db))
 	merchant.GET("/users", checkJWT(), getUsers())

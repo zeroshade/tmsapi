@@ -171,7 +171,7 @@ type Payer struct {
 }
 
 type PurchaseItem struct {
-	CheckoutID  string `json:"-" gorm:"primary_key"`
+	CheckoutID  string `json:"coid" gorm:"primary_key"`
 	Sku         string `json:"sku" gorm:"primary_key"`
 	Name        string `json:"name"`
 	Amount      Amount `json:"unit_amount" gorm:"embedded"`
@@ -192,6 +192,13 @@ type PurchaseUnit struct {
 	Payments    struct {
 		Captures []*Capture `json:"captures" gorm:"foreignkey:CheckoutID;association_foreignkey:CheckoutID"`
 	} `json:"payments" gorm:"embedded"`
+}
+
+func (pu *PurchaseUnit) BeforeCreate(tx *gorm.DB) error {
+	for idx := range pu.Payments.Captures {
+		pu.Payments.Captures[idx].CheckoutID = pu.CheckoutID
+	}
+	return nil
 }
 
 type Capture struct {
