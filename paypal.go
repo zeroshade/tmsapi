@@ -169,7 +169,7 @@ type Payer struct {
 		CountryCode string `json:"country_code"`
 	} `json:"address" gorm:"-"`
 	PhoneNumber struct {
-		NationalNumber string `json:"national_number" gorm:"phone_number"`
+		NationalNumber string `json:"national_number" gorm:"column:phone_number"`
 	} `json:"phone_number" gorm:"embedded"`
 }
 
