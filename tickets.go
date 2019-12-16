@@ -107,6 +107,7 @@ func GetPurchases(db *gorm.DB) gin.HandlerFunc {
 		for idx := range co {
 			db.Where("checkout_id = ?", co[idx].ID).Find(&co[idx].PurchaseUnits)
 			db.Where("checkout_id = ?", co[idx].ID).Find(&co[idx].PurchaseUnits[0].Payments.Captures)
+			db.Where("checkout_id = ?", co[idx].ID).Find(&co[idx].PurchaseUnits[0].Items)
 		}
 
 		c.JSON(http.StatusOK, gin.H{"items": ret, "orders": co})
