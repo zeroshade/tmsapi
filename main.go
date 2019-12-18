@@ -29,7 +29,7 @@ func main() {
 	defer db.Close()
 	db.AutoMigrate(&Product{}, &Schedule{}, &ScheduleTime{}, &TicketCategory{},
 		&Transaction{}, &Payment{}, &Sale{}, &PayerInfo{}, &WebHookEvent{}, &Item{},
-		&CheckoutOrder{}, &Payer{}, &PurchaseItem{}, &PurchaseUnit{}, &Capture{})
+		&CheckoutOrder{}, &Payer{}, &PurchaseItem{}, &PurchaseUnit{}, &Capture{}, &MerchantConfig{})
 	db.Model(&Schedule{}).Association("TimeArray")
 	db.Model(&Schedule{}).Association("NotAvail")
 	db.Model(&Payment{}).Association("Payer.PayerInfo")
@@ -74,8 +74,11 @@ func main() {
 	merchant.DELETE("/user/:userid", checkJWT(), deleteUser())
 	merchant.POST("/passes", GetPasses(db))
 	merchant.GET("/passes/:checkoutid", GetBoardingPasses(db))
+	merchant.GET("/config", GetMerchantConfig(db))
+	merchant.PUT("/config", checkJWT(), UpdateMerchantConfig(db))
 
 	router.POST("/paypal", HandlePaypalWebhook(db))
+	router.POST("/confirmed", ConfirmAndSend(db))
 	router.GET("/transaction/:transaction", GetItems(db))
 
 	srv := &http.Server{

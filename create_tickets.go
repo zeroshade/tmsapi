@@ -16,7 +16,7 @@ const passHeight = 65
 const left = 5
 const spaceBetween = 15
 
-func drawPass(f *gofpdf.Fpdf, item *PurchaseItem, name, qrname string) {
+func drawPass(f *gofpdf.Fpdf, item *PurchaseItem, passTitle, name, qrname string) {
 	var opt gofpdf.ImageOptions
 	opt.ImageType = "png"
 
@@ -34,7 +34,7 @@ func drawPass(f *gofpdf.Fpdf, item *PurchaseItem, name, qrname string) {
 	f.SetX(left)
 	f.SetFont("Courier", "B", 18)
 	f.SetTextColor(255, 255, 255)
-	f.CellFormat(205, 7, "Boat Title W00t", "B", 1, "C", true, 0, "")
+	f.CellFormat(205, 7, passTitle, "B", 1, "C", true, 0, "")
 
 	f.SetTextColor(0, 0, 0)
 	f.SetFont("Courier", "", 18)
@@ -69,7 +69,7 @@ func drawPass(f *gofpdf.Fpdf, item *PurchaseItem, name, qrname string) {
 	f.SetXY(0, starty+passHeight+spaceBetween)
 }
 
-func generatePdf(items []PurchaseItem, name string, w io.Writer) {
+func generatePdf(items []PurchaseItem, passTitle, name string, w io.Writer) {
 	var opt gofpdf.ImageOptions
 	opt.ImageType = "png"
 
@@ -81,7 +81,7 @@ func generatePdf(items []PurchaseItem, name string, w io.Writer) {
 			qrname := fmt.Sprintf("%s-%s-%d", i.CheckoutID, i.Sku, n)
 			data, _ := qrcode.Encode(qrname, qrcode.High, 50)
 			pdf.RegisterImageOptionsReader(qrname, opt, bytes.NewReader(data))
-			drawPass(pdf, &i, name, qrname)
+			drawPass(pdf, &i, passTitle, name, qrname)
 		}
 	}
 	pdf.Output(w)
@@ -89,6 +89,9 @@ func generatePdf(items []PurchaseItem, name string, w io.Writer) {
 
 func GetBoardingPasses(db *gorm.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
+		var config MerchantConfig
+		db.Find(&config, "id = ?", c.Param("merchantid"))
+
 		var items []PurchaseItem
 		var name string
 		var email string
@@ -106,6 +109,6 @@ func GetBoardingPasses(db *gorm.DB) gin.HandlerFunc {
 		c.Status(http.StatusOK)
 		c.Header("Content-Type", "application/pdf")
 		c.Header("Content-Disposition", `attachment; filename="boardingpasses.pdf"`)
-		generatePdf(items, name, c.Writer)
+		generatePdf(items, config.PassTitle, name, c.Writer)
 	}
 }

@@ -13,6 +13,9 @@ require (
 	github.com/jinzhu/now v1.1.1 // indirect
 	github.com/jung-kurt/gofpdf v1.16.2
 	github.com/lib/pq v1.2.0
+	github.com/sendgrid/rest v2.4.1+incompatible // indirect
+	github.com/sendgrid/sendgrid-go v3.5.0+incompatible
+	github.com/sfreiberg/gotwilio v0.0.0-20191120211240-38187998ae52
 	github.com/skip2/go-qrcode v0.0.0-20191027152451-9434209cb086
 	github.com/stretchr/testify v1.4.0 // indirect
 	golang.org/x/crypto v0.0.0-20191206172530-e9b2fee46413 // indirect

@@ -142,3 +142,18 @@ func (c *Client) VerifyWebHookSig(req *http.Request, webhookID string) bool {
 
 	return verifyResponse.Status == "SUCCESS"
 }
+
+func (c *Client) GetCheckoutOrder(id string) ([]byte, error) {
+	req, err := http.NewRequest("GET", c.APIBase+"/v2/checkout/orders/"+id, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	resp, err := c.SendWithAuth(req)
+	if err != nil {
+		return nil, err
+	}
+
+	defer resp.Body.Close()
+	return ioutil.ReadAll(resp.Body)
+}
