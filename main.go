@@ -72,6 +72,8 @@ func main() {
 	merchant.GET("/users", checkJWT(), getUsers())
 	merchant.POST("/user", checkJWT(), createUser())
 	merchant.DELETE("/user/:userid", checkJWT(), deleteUser())
+	merchant.POST("/passes", GetPasses(db))
+	merchant.GET("/passes/:checkoutid", GetBoardingPasses(db))
 
 	router.POST("/paypal", HandlePaypalWebhook(db))
 	router.GET("/transaction/:transaction", GetItems(db))

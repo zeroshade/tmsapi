@@ -50,12 +50,6 @@ func SaveTicketCats(db *gorm.DB) gin.HandlerFunc {
 	}
 }
 
-func TripOnDate(d time.Time) func(db *gorm.DB) *gorm.DB {
-	return func(db *gorm.DB) *gorm.DB {
-		return db.Where("TO_TIMESTAMP(LEFT(RIGHT(sku, 13), -3)::INTEGER) = ?", d)
-	}
-}
-
 func GetCheckouts(db *gorm.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var orders []*CheckoutOrder
@@ -111,5 +105,38 @@ func GetPurchases(db *gorm.DB) gin.HandlerFunc {
 		}
 
 		c.JSON(http.StatusOK, gin.H{"items": ret, "orders": co})
+	}
+}
+
+func GetPasses(db *gorm.DB) gin.HandlerFunc {
+	type PassesReq struct {
+		Email string `json:"email"`
+	}
+	return func(c *gin.Context) {
+		var req PassesReq
+		if err := c.ShouldBindJSON(&req); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+
+		if req.Email != "" {
+			sub := db.Table("payers").Where("email = ?", req.Email).Select("id").SubQuery()
+
+			type Result struct {
+				CheckoutID string    `json:"checkoutId"`
+				CreateTime time.Time `json:"created"`
+			}
+			var out []Result
+			db.Table("purchase_units AS pu").
+				Select("pu.checkout_id, co.create_time").
+				Joins("LEFT JOIN checkout_orders AS co ON co.id = pu.checkout_id").
+				Where("payer_id = ANY((SELECT array(?))::text[]) AND payee_merchant_id = ?", sub, c.Param("merchantid")).
+				Scan(&out)
+
+			c.JSON(http.StatusOK, out)
+			return
+		}
+
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Must have at least one"})
 	}
 }
