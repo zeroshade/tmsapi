@@ -27,7 +27,7 @@ func main() {
 		log.Fatal(err)
 	}
 	defer db.Close()
-	db.AutoMigrate(&Product{}, &Schedule{}, &ScheduleTime{}, &TicketCategory{},
+	db.AutoMigrate(&Product{}, &Schedule{}, &ScheduleTime{}, &TicketCategory{}, &Report{},
 		&Transaction{}, &Payment{}, &Sale{}, &PayerInfo{}, &WebHookEvent{}, &Item{},
 		&CheckoutOrder{}, &Payer{}, &PurchaseItem{}, &PurchaseUnit{}, &Capture{}, &MerchantConfig{})
 	db.Model(&Schedule{}).Association("TimeArray")
@@ -76,6 +76,8 @@ func main() {
 	merchant.GET("/passes/:checkoutid", GetBoardingPasses(db))
 	merchant.GET("/config", GetMerchantConfig(db))
 	merchant.PUT("/config", checkJWT(), UpdateMerchantConfig(db))
+	merchant.GET("/reports", GetReports(db))
+	merchant.PUT("/reports", checkJWT(), SaveReport(db))
 
 	router.POST("/paypal", HandlePaypalWebhook(db))
 	router.POST("/confirmed", ConfirmAndSend(db))
