@@ -9,12 +9,12 @@ import (
 )
 
 type Report struct {
-	CreatedAt  time.Time `json:"createdAt"`
-	UpdatedAt  time.Time `json:"updatedAt"`
-	DeletedAt  time.Time `json:"deletedAt"`
-	ID         uint      `json:"id" gorm:"primary_key"`
-	MerchantID string    `json:"-" gorm:"index:merchant"`
-	Content    string    `json:"content"`
+	CreatedAt  *time.Time `json:"createdAt"`
+	UpdatedAt  *time.Time `json:"updatedAt"`
+	DeletedAt  *time.Time `json:"deletedAt"`
+	ID         uint       `json:"id" gorm:"primary_key"`
+	MerchantID string     `json:"-" gorm:"index:merchant"`
+	Content    string     `json:"content"`
 }
 
 func GetReports(db *gorm.DB) gin.HandlerFunc {
@@ -37,5 +37,13 @@ func SaveReport(db *gorm.DB) gin.HandlerFunc {
 		rep.MerchantID = c.Param("merchantid")
 		db.Save(&rep)
 		c.Status(http.StatusOK)
+	}
+}
+
+func DeleteReport(db *gorm.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		db.Delete(&Report{}, "merchant_id = ? AND id = ?", c.Param("merchantid"), c.Param("id"))
+
+		c.Status(http.StatusNoContent)
 	}
 }

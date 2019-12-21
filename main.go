@@ -78,6 +78,7 @@ func main() {
 	merchant.PUT("/config", checkJWT(), UpdateMerchantConfig(db))
 	merchant.GET("/reports", GetReports(db))
 	merchant.PUT("/reports", checkJWT(), SaveReport(db))
+	merchant.DELETE("/reports/:id", checkJWT(), DeleteReport(db))
 
 	router.POST("/paypal", HandlePaypalWebhook(db))
 	router.POST("/confirmed", ConfirmAndSend(db))
