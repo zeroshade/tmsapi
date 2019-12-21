@@ -13,7 +13,7 @@ import (
 // categories to prices for that price structure
 type TicketCategory struct {
 	ID         uint            `json:"id" gorm:"primary_key"`
-	MerchantID string          `json:"-" gorm:"index:merchant"`
+	MerchantID string          `json:"-" gorm:"index:ticket_merchant"`
 	Name       string          `json:"name"`
 	Categories postgres.Hstore `json:"categories"`
 }
@@ -46,7 +46,7 @@ func SaveTicketCats(db *gorm.DB) gin.HandlerFunc {
 
 		for _, ct := range cat {
 			ct.MerchantID = c.Param("merchantid")
-			db.Save(&c)
+			db.Save(&ct)
 		}
 		c.Status(http.StatusOK)
 	}
