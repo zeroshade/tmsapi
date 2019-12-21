@@ -13,6 +13,7 @@ import (
 // categories to prices for that price structure
 type TicketCategory struct {
 	ID         uint            `json:"id" gorm:"primary_key"`
+	MerchantID string          `json:"-" gorm:"index:merchant"`
 	Name       string          `json:"name"`
 	Categories postgres.Hstore `json:"categories"`
 }
@@ -21,14 +22,14 @@ type TicketCategory struct {
 func GetTicketCats(db *gorm.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var cats []TicketCategory
-		db.Find(&cats)
+		db.Find(&cats, "merchant_id = ?", c.Param("merchantid"))
 		c.JSON(http.StatusOK, cats)
 	}
 }
 
 func DeleteTicketsCat(db *gorm.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		db.Where("id = ?", c.Param("id")).Delete(TicketCategory{})
+		db.Where("id = ? AND merchant_id = ?", c.Param("id"), c.Param("merchantid")).Delete(TicketCategory{})
 		c.Status(http.StatusOK)
 	}
 }
@@ -43,7 +44,8 @@ func SaveTicketCats(db *gorm.DB) gin.HandlerFunc {
 			return
 		}
 
-		for _, c := range cat {
+		for _, ct := range cat {
+			ct.MerchantID = c.Param("merchantid")
 			db.Save(&c)
 		}
 		c.Status(http.StatusOK)
