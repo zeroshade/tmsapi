@@ -44,3 +44,10 @@ func GetProducts(db *gorm.DB) gin.HandlerFunc {
 		c.JSON(http.StatusOK, prods)
 	}
 }
+
+func DeleteProduct(db *gorm.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		db.Where("id = ? AND merchant_id = ?", c.Param("prodid"), c.Param("merchantid")).Delete(&Product{})
+		c.Status(http.StatusOK)
+	}
+}
