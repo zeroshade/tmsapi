@@ -20,7 +20,8 @@ func init() {
 type ScheduleTime struct {
 	ID         uint   `json:"id"`
 	ScheduleID uint   `json:"-"`
-	Time       string `json:"time"`
+	StartTime  string `json:"startTime"`
+	EndTime    string `json:"endTime"`
 	Price      string `json:"price"`
 }
 
@@ -34,6 +35,17 @@ type Schedule struct {
 	TimeArray    []ScheduleTime `json:"timeArray"`
 	Days         pq.Int64Array  `json:"selectedDays" gorm:"type:integer[]"`
 	NotAvail     pq.StringArray `json:"notAvailArray,nilasempty" gorm:"type:text[]"`
+}
+
+func (s *Schedule) AfterUpdate(tx *gorm.DB) (err error) {
+	ids := make([]uint, 0, len(s.TimeArray))
+	for _, t := range s.TimeArray {
+		ids = append(ids, t.ID)
+	}
+
+	// clear out old schedules
+	tx.Where("schedule_id = ?", s.ID).Not("id", ids).Delete(ScheduleTime{})
+	return
 }
 
 // MarshalJSON handles the proper date formatting for schedules
