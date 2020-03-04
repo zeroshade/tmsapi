@@ -74,7 +74,7 @@ func GetCheckouts(db *gorm.DB) gin.HandlerFunc {
 
 func TripsOnDay(d string) func(db *gorm.DB) *gorm.DB {
 	return func(db *gorm.DB) *gorm.DB {
-		return db.Where("date_trunc('day', TO_TIMESTAMP(LEFT(RIGHT(sku, 13), -3)::INTEGER)) = ?", d)
+		return db.Where("date_trunc('day', TO_TIMESTAMP(SUBSTRING(sku FROM '\\d[A-Z]+(\\d{10})\\d*')::INTEGER)) = ?", d)
 	}
 }
 
