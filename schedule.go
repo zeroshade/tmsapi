@@ -72,7 +72,7 @@ func GetSoldTickets(db *gorm.DB) gin.HandlerFunc {
 		sub := db.Model(&PurchaseItem{}).
 			Select([]string{"checkout_id",
 				`(regexp_matches(sku, '^\d+'))[1]::integer as pid`,
-				"TO_TIMESTAMP(LEFT(RIGHT(sku, 13), -3)::INTEGER) as tm",
+				"TO_TIMESTAMP(SUBSTRING(sku FROM '\\d[A-Z]+(\\d{10})\\d*')::INTEGER) as tm",
 				"SUM(quantity) as q"}).Group("checkout_id, pid, tm").SubQuery()
 
 		var out []result
