@@ -21,6 +21,7 @@ type Product struct {
 	Publish     bool       `json:"publish"`
 	ShowTickets bool       `json:"showTickets"`
 	Schedules   []Schedule `json:"schedList"`
+	Fish        string     `json:"fish"`
 }
 
 // SaveProduct exports a handler for reading in a product and saving it to the db
