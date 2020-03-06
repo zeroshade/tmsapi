@@ -78,6 +78,41 @@ func TripsOnDay(d string) func(db *gorm.DB) *gorm.DB {
 	}
 }
 
+func TripTime(d string) func(db *gorm.DB) *gorm.DB {
+	return func(db *gorm.DB) *gorm.DB {
+		return db.Where("SUBSTRING(sku FROM '\\d[A-Z]+(\\d{10})\\d*') = ?", d)
+	}
+}
+
+func OrdersTimestamp(db *gorm.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		type Ret struct {
+			Name        string `json:"name"`
+			Description string `json:"desc"`
+			Value       string `json:"value"`
+			Payer       string `json:"payer"`
+			PayerID     string `json:"payerId"`
+			Email       string `json:"email"`
+			PhoneNumber string `json:"phone"`
+			Quantity    uint   `json:"qty"`
+			Coid        string `json:"coid"`
+			Sku         string `json:"sku"`
+		}
+
+		var ret []Ret
+		db.Table("purchase_items as pi").
+			Joins("LEFT JOIN purchase_units as pu USING(checkout_id)").
+			Joins("LEFT JOIN checkout_orders as co ON pi.checkout_id = co.id").
+			Joins("LEFT JOIN payers as pa ON co.payer_id = pa.id").
+			Where("pu.payee_merchant_id = ? AND SUBSTRING(sku FROM '\\d[A-Z]+(\\d{10})\\d*') = ?",
+				c.Param("merchantid"), c.Param("timestamp")).
+			Select("pi.name, co.payer_id, pi.checkout_id as coid, sku, pi.description, pi.value, given_name || ' ' || surname as payer, email, phone_number, quantity").
+			Scan(&ret)
+
+		c.JSON(http.StatusOK, ret)
+	}
+}
+
 func GetPurchases(db *gorm.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var ret []PurchaseItem
@@ -107,6 +142,77 @@ func GetPurchases(db *gorm.DB) gin.HandlerFunc {
 		}
 
 		c.JSON(http.StatusOK, gin.H{"items": ret, "orders": co})
+	}
+}
+
+func GetOrders(db *gorm.DB) gin.HandlerFunc {
+	type OrdersReq struct {
+		From     string   `json:"from"`
+		To       string   `json:"to"`
+		Page     uint     `json:"page"`
+		PerPage  uint     `json:"perPage"`
+		SortBy   []string `json:"sortBy"`
+		SortDesc []bool   `json:"sortDesc"`
+	}
+
+	return func(c *gin.Context) {
+		var req OrdersReq
+		if err := c.ShouldBindJSON(&req); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+
+		var count uint
+
+		var ret []PurchaseItem
+		scope := db.Table("purchase_items as pi").
+			Select("pi.*").
+			Joins("LEFT JOIN purchase_units as pu ON pi.checkout_id = pu.checkout_id").
+			Where("pu.payee_merchant_id = ?", c.Param("merchantid"))
+
+		scope.Count(&count)
+
+		for idx, sort := range req.SortBy {
+			col := sort
+			switch sort {
+			case "cost":
+				col = "value"
+			case "title":
+				col = "description"
+			}
+			if req.SortDesc[idx] {
+				scope = scope.Order(col + " desc")
+			} else {
+				scope = scope.Order(col)
+			}
+		}
+
+		if req.PerPage > 0 {
+			scope = scope.Offset((req.Page - 1) * req.PerPage).Limit(req.PerPage)
+		}
+
+		scope.Scan(&ret)
+
+		checkouts := make(map[string]*CheckoutOrder)
+		for _, i := range ret {
+			checkouts[i.CheckoutID] = nil
+		}
+
+		ids := make([]string, len(checkouts))
+		for k := range checkouts {
+			ids = append(ids, k)
+		}
+
+		var co []CheckoutOrder
+		db.Preload("Payer").Where("id in (?)", ids).Find(&co)
+
+		for idx := range co {
+			db.Where("checkout_id = ?", co[idx].ID).Find(&co[idx].PurchaseUnits)
+			db.Where("checkout_id = ?", co[idx].ID).Find(&co[idx].PurchaseUnits[0].Payments.Captures)
+			db.Where("checkout_id = ?", co[idx].ID).Find(&co[idx].PurchaseUnits[0].Items)
+		}
+
+		c.JSON(http.StatusOK, gin.H{"total": count, "items": ret, "orders": co})
 	}
 }
 
