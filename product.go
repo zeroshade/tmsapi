@@ -33,6 +33,12 @@ func SaveProduct(db *gorm.DB) gin.HandlerFunc {
 			return
 		}
 
+		ids := make([]uint, 0, len(inprod.Schedules))
+		for _, s := range inprod.Schedules {
+			ids = append(ids, s.ID)
+		}
+		db.Where("product_id = ?", inprod.ID).Not("id", ids).Delete(Schedule{})
+
 		inprod.MerchantID = c.Param("merchantid")
 		db.Save(&inprod)
 	}
