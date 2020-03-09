@@ -15,6 +15,7 @@ type MerchantConfig struct {
 	EmailName    string `json:"emailName"`
 	EmailContent string `json:"emailContent"`
 	SendSMS      bool   `json:"sendSMS" gorm:"default:false"`
+	TermsConds   string `json:"terms"`
 }
 
 func GetMerchantConfig(db *gorm.DB) gin.HandlerFunc {
