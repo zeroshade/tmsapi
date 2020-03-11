@@ -20,11 +20,12 @@ import (
 var twilioAccountSid = os.Getenv("TWILIO_ACCOUNT_SID")
 var twilioAuthToken = os.Getenv("TWILIO_AUTH_TOKEN")
 var twilioMsgingService = os.Getenv("TWILIO_MSGING_SERVICE")
+var twilioMsgFrom = os.Getenv("TWILIO_MSG_FROM")
 
 func sendTwilio(to, body string) error {
 	msgData := url.Values{}
 	msgData.Set("To", to)
-	msgData.Set("MessagingServiceSid", twilioMsgingService)
+	msgData.Set("From", twilioMsgFrom)
 	msgData.Set("Body", body)
 
 	twilioApiUrl := "https://api.twilio.com/2010-04-01/Accounts/" + twilioAccountSid + "/Messages.json"
