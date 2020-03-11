@@ -77,9 +77,11 @@ func ConfirmAndSend(db *gorm.DB) gin.HandlerFunc {
 			c.JSON(http.StatusFailedDependency, gin.H{"error": err.Error()})
 			return
 		}
+		fmt.Println(order)
 
 		var conf MerchantConfig
-		db.Find(&conf, "id = ?", order.PurchaseUnits[0].Payee.MerchantID)
+		mid := order.PurchaseUnits[0].Payee.MerchantID
+		db.Find(&conf, "id = ? OR sandbox_id = ?", mid, mid)
 
 		from := mail.NewEmail(conf.EmailName, conf.EmailFrom)
 		subject := "Tickets Purchased"
