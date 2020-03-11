@@ -5,7 +5,13 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/jinzhu/gorm"
+	"github.com/lib/pq"
 )
+
+type SandboxInfo struct {
+	ID         string         `gorm:"primary_key"`
+	SandboxIDs pq.StringArray `gorm:"type:text[]"`
+}
 
 type MerchantConfig struct {
 	ID           string `json:"-" gorm:"primary_key"`
