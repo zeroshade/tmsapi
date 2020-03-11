@@ -83,7 +83,7 @@ func ConfirmAndSend(db *gorm.DB) gin.HandlerFunc {
 		db.Find(&conf, "id = ?", mid)
 
 		if len(conf.ID) <= 0 {
-			db.Table("sandbox_infos").Select("id").Where("? = ANY (sandbox_ids)", mid).Scan(&conf.ID)
+			db.Table("sandbox_infos").Select("id").Where("? = ANY (sandbox_ids)", mid).Scan(&conf)
 			db.Find(&conf)
 		}
 
