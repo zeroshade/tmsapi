@@ -99,19 +99,16 @@ func OrdersTimestamp(db *gorm.DB) gin.HandlerFunc {
 			Sku         string `json:"sku"`
 		}
 
-		type Merchant struct {
-			ID string
-		}
-		var mer Merchant
-		db.Table("sandbox_infos").Select("id").Where("? = ANY (sandbox_ids)", c.Param("merchantid")).Scan(&mer)
+		sids := make([]string, 0)
+		db.Table("sandbox_infos").Select("sandbox_ids").Where("id = ?", c.Param("merchantid")).Scan(&sids)
 
 		var ret []Ret
 		db.Table("purchase_items as pi").
 			Joins("LEFT JOIN purchase_units as pu USING(checkout_id)").
 			Joins("LEFT JOIN checkout_orders as co ON pi.checkout_id = co.id").
 			Joins("LEFT JOIN payers as pa ON co.payer_id = pa.id").
-			Where("(pu.payee_merchant_id = ? OR pu.payee_merchant_id = ?) AND SUBSTRING(sku FROM '\\d[A-Z]+(\\d{10})\\d*') = ?",
-				c.Param("merchantid"), mer.ID, c.Param("timestamp")).
+			Where("(pu.payee_merchant_id = ? OR pu.payee_merchant_id IN (?)) AND SUBSTRING(sku FROM '\\d[A-Z]+(\\d{10})\\d*') = ?",
+				c.Param("merchantid"), sids, c.Param("timestamp")).
 			Select("pi.name, co.payer_id, pi.checkout_id as coid, sku, pi.description, pi.value, given_name || ' ' || surname as payer, email, phone_number, quantity").
 			Scan(&ret)
 
