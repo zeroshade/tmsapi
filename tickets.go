@@ -7,6 +7,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/jinzhu/gorm"
 	"github.com/jinzhu/gorm/dialects/postgres"
+	"github.com/lib/pq"
 )
 
 // TicketCategory holds the name of a price type and the mapping of
@@ -99,15 +100,16 @@ func OrdersTimestamp(db *gorm.DB) gin.HandlerFunc {
 			Sku         string `json:"sku"`
 		}
 
-		sids := make([]string, 0)
-		db.Debug().Table("sandbox_infos").Select("sandbox_ids").Where("id = ?", c.Param("merchantid")).Scan(&sids)
+		var sids pq.StringArray
+		row := db.Table("sandbox_infos").Select("sandbox_ids").Where("id = ?", c.Param("merchantid")).Row()
+		row.Scan(&sids)
 
 		var ret []Ret
 		db.Debug().Table("purchase_items as pi").
 			Joins("LEFT JOIN purchase_units as pu USING(checkout_id)").
 			Joins("LEFT JOIN checkout_orders as co ON pi.checkout_id = co.id").
 			Joins("LEFT JOIN payers as pa ON co.payer_id = pa.id").
-			Where("(pu.payee_merchant_id = ? OR pu.payee_merchant_id IN (?)) AND SUBSTRING(sku FROM '\\d[A-Z]+(\\d{10})\\d*') = ?",
+			Where("(pu.payee_merchant_id = ? OR pu.payee_merchant_id = ANY (?)) AND SUBSTRING(sku FROM '\\d[A-Z]+(\\d{10})\\d*') = ?",
 				c.Param("merchantid"), sids, c.Param("timestamp")).
 			Select("pi.name, co.payer_id, pi.checkout_id as coid, sku, pi.description, pi.value, given_name || ' ' || surname as payer, email, phone_number, quantity").
 			Scan(&ret)
