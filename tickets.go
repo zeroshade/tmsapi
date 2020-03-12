@@ -100,10 +100,10 @@ func OrdersTimestamp(db *gorm.DB) gin.HandlerFunc {
 		}
 
 		sids := make([]string, 0)
-		db.Table("sandbox_infos").Select("sandbox_ids").Where("id = ?", c.Param("merchantid")).Scan(&sids)
+		db.Debug().Table("sandbox_infos").Select("sandbox_ids").Where("id = ?", c.Param("merchantid")).Scan(&sids)
 
 		var ret []Ret
-		db.Table("purchase_items as pi").
+		db.Debug().Table("purchase_items as pi").
 			Joins("LEFT JOIN purchase_units as pu USING(checkout_id)").
 			Joins("LEFT JOIN checkout_orders as co ON pi.checkout_id = co.id").
 			Joins("LEFT JOIN payers as pa ON co.payer_id = pa.id").
