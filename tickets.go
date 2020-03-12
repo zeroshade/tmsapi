@@ -105,7 +105,7 @@ func OrdersTimestamp(db *gorm.DB) gin.HandlerFunc {
 		row.Scan(&sids)
 
 		var ret []Ret
-		db.Debug().Table("purchase_items as pi").
+		db.Table("purchase_items as pi").
 			Joins("LEFT JOIN purchase_units as pu USING(checkout_id)").
 			Joins("LEFT JOIN checkout_orders as co ON pi.checkout_id = co.id").
 			Joins("LEFT JOIN payers as pa ON co.payer_id = pa.id").
