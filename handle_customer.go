@@ -7,7 +7,10 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"regexp"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/jinzhu/gorm"
@@ -76,6 +79,21 @@ func ConfirmAndSend(db *gorm.DB) gin.HandlerFunc {
 		if err := json.Unmarshal(data, &order); err != nil {
 			c.JSON(http.StatusFailedDependency, gin.H{"error": err.Error()})
 			return
+		}
+
+		re := regexp.MustCompile(`(\d+)[A-Z]+(\d{10})`)
+
+		for _, pu := range order.PurchaseUnits {
+			for _, item := range pu.Items {
+				res := re.FindStringSubmatch(item.Sku)
+				pid, _ := strconv.Atoi(res[1])
+				timestamp, _ := strconv.ParseInt(res[2], 10, 64)
+
+				tm := time.Unix(timestamp, 0).In(timeloc)
+
+				db.Model(ManualOverride{}).Where("product_id = ? AND time = ?", pid, tm).
+					UpdateColumn("avail", gorm.Expr("avail - ?", item.Quantity))
+			}
 		}
 
 		var conf MerchantConfig

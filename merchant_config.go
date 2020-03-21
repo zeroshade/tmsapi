@@ -8,6 +8,11 @@ import (
 	"github.com/lib/pq"
 )
 
+func addMerchantConfigRoutes(router *gin.RouterGroup, db *gorm.DB) {
+	router.GET("/config", GetMerchantConfig(db))
+	router.PUT("/config", checkJWT(), UpdateMerchantConfig(db))
+}
+
 type SandboxInfo struct {
 	ID         string         `gorm:"primary_key"`
 	SandboxIDs pq.StringArray `gorm:"type:text[]"`

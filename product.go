@@ -8,6 +8,12 @@ import (
 	"github.com/jinzhu/gorm"
 )
 
+func addProductRoutes(router *gin.RouterGroup, db *gorm.DB) {
+	router.GET("/", GetProducts(db))
+	router.PUT("/product", checkJWT(), SaveProduct(db))
+	router.DELETE("/product/:prodid", checkJWT(), DeleteProduct(db))
+}
+
 // Product represents a specific Type of tickets sold
 type Product struct {
 	ID          uint       `json:"id" gorm:"primary_key"`

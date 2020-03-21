@@ -7,6 +7,7 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
+	"github.com/jinzhu/gorm"
 	"github.com/zeroshade/tmsapi/internal"
 )
 
@@ -14,6 +15,12 @@ var auth0Client *internal.Auth0Client
 
 func init() {
 	auth0Client = internal.NewAuth0Client()
+}
+
+func addUserRoutes(router *gin.RouterGroup, db *gorm.DB) {
+	router.GET("/users", checkJWT(), getUsers())
+	router.POST("/user", checkJWT(), createUser())
+	router.DELETE("/user/:userid", checkJWT(), deleteUser())
 }
 
 func getUsers() gin.HandlerFunc {

@@ -10,6 +10,17 @@ import (
 	"github.com/lib/pq"
 )
 
+func addTicketRoutes(router *gin.RouterGroup, db *gorm.DB) {
+	router.PUT("/tickets", checkJWT(), SaveTicketCats(db))
+	router.GET("/tickets", GetTicketCats(db))
+	router.GET("/items/:date", checkJWT(), GetPurchases(db))
+	router.POST("/items", checkJWT(), GetOrders(db))
+	router.DELETE("/tickets/:id", checkJWT(), DeleteTicketsCat(db))
+	router.GET("/orders/:timestamp", checkJWT(), OrdersTimestamp(db))
+	router.GET("/orders", GetCheckouts(db))
+	router.POST("/passes", GetPasses(db))
+}
+
 // TicketCategory holds the name of a price type and the mapping of
 // categories to prices for that price structure
 type TicketCategory struct {

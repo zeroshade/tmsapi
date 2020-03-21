@@ -16,6 +16,55 @@ func init() {
 	timeloc, _ = time.LoadLocation("America/New_York")
 }
 
+func addScheduleRoutes(router *gin.RouterGroup, db *gorm.DB) {
+	router.GET("/schedule/:from/:to", GetSoldTickets(db))
+	router.PUT("/override", checkJWT(), saveOverride(db))
+	router.GET("/override/:date", checkJWT(), getOverrides(db))
+	router.GET("/overrides/:from/:to", getOverrideRange(db))
+}
+
+type ManualOverride struct {
+	ProductID uint      `json:"pid" gorm:"primary_key"`
+	Time      time.Time `json:"time" gorm:"primary_key"`
+	Cancelled bool      `json:"cancelled"`
+	Avail     uint      `json:"avail"`
+}
+
+func getOverrideRange(db *gorm.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		var ret []ManualOverride
+		merchantProds := db.Model(Product{}).Where("merchant_id = ? AND id = product_id", c.Param("merchantid")).Select("1").SubQuery()
+
+		db.Model(ManualOverride{}).
+			Where("DATE(time) BETWEEN ? AND ? AND EXISTS ?", c.Param("from"), c.Param("to"), merchantProds).
+			Find(&ret)
+
+		c.JSON(http.StatusOK, ret)
+	}
+}
+
+func getOverrides(db *gorm.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		var overrides []ManualOverride
+		db.Where("DATE(time) = ?", c.Param("date")).Find(&overrides)
+		c.JSON(http.StatusOK, overrides)
+	}
+}
+
+func saveOverride(db *gorm.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		var over ManualOverride
+		if err := c.ShouldBindJSON(&over); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+
+		over.Time = over.Time.In(timeloc)
+
+		db.Save(&over)
+	}
+}
+
 // ScheduleTime represents a specific trip time for the schedule
 type ScheduleTime struct {
 	ID         uint   `json:"id"`

@@ -8,6 +8,12 @@ import (
 	"github.com/jinzhu/gorm"
 )
 
+func addReportRoutes(router *gin.RouterGroup, db *gorm.DB) {
+	router.GET("/reports", GetReports(db))
+	router.PUT("/reports", checkJWT(), SaveReport(db))
+	router.DELETE("/reports/:id", checkJWT(), DeleteReport(db))
+}
+
 type Report struct {
 	CreatedAt  *time.Time `json:"createdAt"`
 	UpdatedAt  *time.Time `json:"updatedAt"`

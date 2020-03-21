@@ -29,7 +29,8 @@ func main() {
 	defer db.Close()
 	db.AutoMigrate(&Product{}, &Schedule{}, &ScheduleTime{}, &TicketCategory{}, &Report{},
 		&Transaction{}, &Payment{}, &Sale{}, &PayerInfo{}, &WebHookEvent{}, &Item{}, &SandboxInfo{},
-		&CheckoutOrder{}, &Payer{}, &PurchaseItem{}, &PurchaseUnit{}, &Capture{}, &MerchantConfig{})
+		&CheckoutOrder{}, &Payer{}, &PurchaseItem{}, &PurchaseUnit{}, &Capture{}, &MerchantConfig{},
+		&ManualOverride{})
 	db.Model(&Schedule{}).Association("TimeArray")
 	db.Model(&Schedule{}).Association("NotAvail")
 	db.Model(&Payment{}).Association("Payer.PayerInfo")
@@ -61,27 +62,13 @@ func main() {
 
 	merchant := router.Group("/info/:merchantid")
 
-	merchant.GET("/", GetProducts(db))
-	merchant.PUT("/product", checkJWT(), SaveProduct(db))
-	merchant.DELETE("/product/:prodid", checkJWT(), DeleteProduct(db))
-	merchant.PUT("/tickets", checkJWT(), SaveTicketCats(db))
-	merchant.GET("/tickets", GetTicketCats(db))
-	merchant.GET("/items/:date", checkJWT(), GetPurchases(db))
-	merchant.GET("/orders/:timestamp", checkJWT(), OrdersTimestamp(db))
-	merchant.POST("/items", checkJWT(), GetOrders(db))
-	merchant.DELETE("/tickets/:id", checkJWT(), DeleteTicketsCat(db))
-	merchant.GET("/schedule/:from/:to", GetSoldTickets(db))
-	merchant.GET("/orders", GetCheckouts(db))
-	merchant.GET("/users", checkJWT(), getUsers())
-	merchant.POST("/user", checkJWT(), createUser())
-	merchant.DELETE("/user/:userid", checkJWT(), deleteUser())
-	merchant.POST("/passes", GetPasses(db))
+	addTicketRoutes(merchant, db)
+	addScheduleRoutes(merchant, db)
+	addReportRoutes(merchant, db)
+	addProductRoutes(merchant, db)
+	addUserRoutes(merchant, db)
+	addMerchantConfigRoutes(merchant, db)
 	merchant.GET("/passes/:checkoutid", GetBoardingPasses(db))
-	merchant.GET("/config", GetMerchantConfig(db))
-	merchant.PUT("/config", checkJWT(), UpdateMerchantConfig(db))
-	merchant.GET("/reports", GetReports(db))
-	merchant.PUT("/reports", checkJWT(), SaveReport(db))
-	merchant.DELETE("/reports/:id", checkJWT(), DeleteReport(db))
 
 	router.POST("/paypal", HandlePaypalWebhook(db))
 	router.POST("/confirmed", ConfirmAndSend(db))
