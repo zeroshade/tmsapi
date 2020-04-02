@@ -118,6 +118,12 @@ func GetSoldTickets(db *gorm.DB) gin.HandlerFunc {
 			Pid   uint      `json:"pid"`
 		}
 
+		si := SandboxInfo{ID: c.Param("merchantid")}
+		db.Find(&si)
+
+		ids := []string{c.Param("merchantid")}
+		ids = append(ids, si.SandboxIDs...)
+
 		sub := db.Model(&PurchaseItem{}).
 			Select([]string{"checkout_id",
 				`(regexp_matches(sku, '^\d+'))[1]::integer as pid`,
@@ -128,8 +134,8 @@ func GetSoldTickets(db *gorm.DB) gin.HandlerFunc {
 		db.Table("purchase_units as pu").
 			Select("pid, tm as stamp, sum(q) as qty").
 			Joins("RIGHT JOIN ? as sub ON pu.checkout_id = sub.checkout_id", sub).
-			Where("pu.payee_merchant_id = ? AND tm BETWEEN TO_TIMESTAMP(?) AND TO_TIMESTAMP(?)",
-				c.Param("merchantid"), c.Param("from"), c.Param("to")).
+			Where("pu.payee_merchant_id IN (?) AND tm BETWEEN TO_TIMESTAMP(?) AND TO_TIMESTAMP(?)",
+				ids, c.Param("from"), c.Param("to")).
 			Group("pid, tm").Scan(&out)
 
 		for idx, o := range out {
