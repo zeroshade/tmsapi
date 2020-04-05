@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -10,6 +11,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"text/template"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -54,6 +56,40 @@ func sendTwilio(to, body string) error {
 	return nil
 }
 
+func sendNotifyEmail(apiKey string, conf *MerchantConfig, order *CheckoutOrder) error {
+	const tmpl = `
+	Tickets Purchased By: {{ .Payer.Name.GivenName }} {{ .Payer.Name.Surname }} <a href='mailto:{{ .Payer.Email }}'>{{ .Payer.Email }}</a>
+	<br /><br />
+	{{ range .PurchaseUnits -}}
+	<ul>
+	{{ range .Items -}}
+	<li>{{ .Quantity }} {{ .Name }}, {{ .Description }}</li>
+	{{- end }}
+	</ul>
+	{{- end }}`
+
+	t := template.Must(template.New("notify").Parse(tmpl))
+
+	from := mail.NewEmail("Do Not Reply", "donotreply@websbyjoe.org")
+	to := mail.NewEmail(conf.EmailName, conf.EmailFrom)
+	subject := "Tickets Purchased"
+	var tpl bytes.Buffer
+	if err := t.Execute(&tpl, order); err != nil {
+		return err
+	}
+	content := mail.NewContent("text/html", tpl.String())
+
+	m := mail.NewV3MailInit(from, subject, to, content)
+	request := sendgrid.GetRequest(apiKey, "/v3/mail/send", "https://api.sendgrid.com")
+	request.Method = "POST"
+	request.Body = mail.GetRequestBody(m)
+	_, err := sendgrid.API(request)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
 func ConfirmAndSend(db *gorm.DB) gin.HandlerFunc {
 	type ConfReq struct {
 		CheckoutId string `json:"checkoutId"`
@@ -80,6 +116,8 @@ func ConfirmAndSend(db *gorm.DB) gin.HandlerFunc {
 			c.JSON(http.StatusFailedDependency, gin.H{"error": err.Error()})
 			return
 		}
+
+		db.Save(&order)
 
 		re := regexp.MustCompile(`(\d+)[A-Z]+(\d{10})`)
 
@@ -121,6 +159,8 @@ func ConfirmAndSend(db *gorm.DB) gin.HandlerFunc {
 			c.JSON(http.StatusFailedDependency, gin.H{"error": err.Error()})
 			return
 		}
+
+		sendNotifyEmail(apiKey, &conf, &order)
 
 		if conf.SendSMS {
 			sendTwilio(conf.NotifyNumber, "Tickets Purchased by "+order.Payer.Name.GivenName+" "+order.Payer.Name.Surname)
