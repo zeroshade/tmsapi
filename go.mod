@@ -13,7 +13,7 @@ require (
 	github.com/jinzhu/now v1.1.1 // indirect
 	github.com/jung-kurt/gofpdf v1.16.2
 	github.com/lib/pq v1.2.0
-	github.com/sendgrid/rest v2.4.1+incompatible // indirect
+	github.com/sendgrid/rest v2.4.1+incompatible
 	github.com/sendgrid/sendgrid-go v3.5.0+incompatible
 	github.com/sfreiberg/gotwilio v0.0.0-20191120211240-38187998ae52
 	github.com/skip2/go-qrcode v0.0.0-20191027152451-9434209cb086

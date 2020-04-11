@@ -3,7 +3,6 @@ package main
 import (
 	"bytes"
 	"encoding/json"
-	"fmt"
 	"log"
 	"net/http"
 	"net/url"
@@ -18,6 +17,7 @@ import (
 	"github.com/jinzhu/gorm"
 	"github.com/zeroshade/tmsapi/internal"
 
+	"github.com/sendgrid/rest"
 	"github.com/sendgrid/sendgrid-go"
 	"github.com/sendgrid/sendgrid-go/helpers/mail"
 )
@@ -27,17 +27,31 @@ var twilioAuthToken = os.Getenv("TWILIO_AUTH_TOKEN")
 var twilioMsgingService = os.Getenv("TWILIO_MSGING_SERVICE")
 var twilioMsgFrom = os.Getenv("TWILIO_MSG_FROM")
 
-func sendTwilio(to, body string) error {
+type twilio struct {
+	sid   string
+	token string
+	from  string
+}
+
+func NewTwilio(sid, token string) *twilio {
+	return &twilio{
+		sid:   sid,
+		token: token,
+		from:  twilioMsgFrom,
+	}
+}
+
+func (t *twilio) send(to, body string) error {
 	msgData := url.Values{}
 	msgData.Set("To", to)
-	msgData.Set("From", twilioMsgFrom)
+	msgData.Set("From", t.from)
 	msgData.Set("Body", body)
 
-	twilioApiUrl := "https://api.twilio.com/2010-04-01/Accounts/" + twilioAccountSid + "/Messages.json"
+	twilioApiUrl := "https://api.twilio.com/2010-04-01/Accounts/" + t.sid + "/Messages.json"
 
 	client := &http.Client{}
 	req, _ := http.NewRequest("POST", twilioApiUrl, strings.NewReader(msgData.Encode()))
-	req.SetBasicAuth(twilioAccountSid, twilioAuthToken)
+	req.SetBasicAuth(t.sid, t.token)
 	req.Header.Add("Accept", "application/json")
 	req.Header.Add("Content-Type", "application/x-www-form-urlencoded")
 
@@ -90,6 +104,141 @@ func sendNotifyEmail(apiKey string, conf *MerchantConfig, order *CheckoutOrder) 
 	return nil
 }
 
+func SendClientMail(apiKey, host, email string, order *CheckoutOrder, conf *MerchantConfig) (*rest.Response, error) {
+	type TmplData struct {
+		Host          string
+		PurchaseUnits []PurchaseUnit
+		MerchantID    string
+		CheckoutID    string
+	}
+
+	const tmpl = `
+	<br /><br />
+	Tickets Ordered:<br/>
+	{{ range .PurchaseUnits -}}
+	<ul>
+	{{ range .Items -}}
+	<li>{{ .Quantity }} {{ .Name }}, {{ .Description }}</li>
+	{{- end }}
+	</ul>
+	{{- end }}
+	<br />
+	You can download your boarding passes here: <a href='https://{{.Host}}/info/{{.MerchantID}}/passes/{{.CheckoutID}}'>Click Here</a>
+	<br />`
+
+	from := mail.NewEmail(conf.EmailName, conf.EmailFrom)
+	subject := "Tickets Purchased"
+	to := mail.NewEmail(order.Payer.Name.GivenName+" "+order.Payer.Name.Surname, email)
+
+	t := template.Must(template.New("notify").Parse(tmpl))
+	var tpl bytes.Buffer
+	if err := t.Execute(&tpl, TmplData{
+		Host:          host,
+		PurchaseUnits: order.PurchaseUnits,
+		MerchantID:    order.PurchaseUnits[0].Payee.MerchantID,
+		CheckoutID:    order.ID}); err != nil {
+		return nil, err
+	}
+	content := mail.NewContent("text/html", conf.EmailContent+tpl.String())
+
+	m := mail.NewV3MailInit(from, subject, to, content)
+	request := sendgrid.GetRequest(apiKey, "/v3/mail/send", "https://api.sendgrid.com")
+	request.Method = "POST"
+	request.Body = mail.GetRequestBody(m)
+	response, err := sendgrid.API(request)
+	if err != nil {
+		return nil, err
+	}
+	return response, nil
+}
+
+func SendText(db *gorm.DB) gin.HandlerFunc {
+	type Req struct {
+		CheckoutID string `json:"checkoutId"`
+		Phone      string `json:"phone"`
+	}
+
+	return func(c *gin.Context) {
+		var r Req
+		if err := c.ShouldBindJSON(&r); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+
+		paypalClient := internal.NewClient(internal.SANDBOX)
+		data, err := paypalClient.GetCheckoutOrder(r.CheckoutID)
+		if err != nil {
+			c.JSON(http.StatusFailedDependency, gin.H{"error": err.Error()})
+			return
+		}
+
+		var order CheckoutOrder
+		if err := json.Unmarshal(data, &order); err != nil {
+			c.JSON(http.StatusFailedDependency, gin.H{"error": err.Error()})
+			return
+		}
+
+		var conf MerchantConfig
+		mid := order.PurchaseUnits[0].Payee.MerchantID
+		db.Find(&conf, "id = ?", mid)
+
+		if len(conf.ID) <= 0 {
+			db.Table("sandbox_infos").Select("id").Where("? = ANY (sandbox_ids)", mid).Scan(&conf)
+			db.Find(&conf)
+		}
+
+		t := NewTwilio(conf.TwilioAcctSID, conf.TwilioAcctToken)
+		t.send(r.Phone, "Boarding Passes Link: https://"+c.Request.Host+"/info/"+order.PurchaseUnits[0].Payee.MerchantID+"/passes/"+order.ID)
+	}
+}
+
+func Resend(db *gorm.DB) gin.HandlerFunc {
+	type Req struct {
+		CheckoutID string `json:"checkoutId"`
+		Email      string `json:"email"`
+	}
+
+	apiKey := os.Getenv("SENDGRID_API_KEY")
+
+	return func(c *gin.Context) {
+		var r Req
+		if err := c.ShouldBindJSON(&r); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+
+		paypalClient := internal.NewClient(internal.SANDBOX)
+		data, err := paypalClient.GetCheckoutOrder(r.CheckoutID)
+		if err != nil {
+			c.JSON(http.StatusFailedDependency, gin.H{"error": err.Error()})
+			return
+		}
+
+		var order CheckoutOrder
+		if err := json.Unmarshal(data, &order); err != nil {
+			c.JSON(http.StatusFailedDependency, gin.H{"error": err.Error()})
+			return
+		}
+
+		var conf MerchantConfig
+		mid := order.PurchaseUnits[0].Payee.MerchantID
+		db.Find(&conf, "id = ?", mid)
+
+		if len(conf.ID) <= 0 {
+			db.Table("sandbox_infos").Select("id").Where("? = ANY (sandbox_ids)", mid).Scan(&conf)
+			db.Find(&conf)
+		}
+
+		response, err := SendClientMail(apiKey, c.Request.Host, r.Email, &order, &conf)
+		if err != nil {
+			c.JSON(http.StatusFailedDependency, gin.H{"error": err.Error()})
+			return
+		}
+
+		c.Status(response.StatusCode)
+	}
+}
+
 func ConfirmAndSend(db *gorm.DB) gin.HandlerFunc {
 	type ConfReq struct {
 		CheckoutId string `json:"checkoutId"`
@@ -134,6 +283,8 @@ func ConfirmAndSend(db *gorm.DB) gin.HandlerFunc {
 			}
 		}
 
+		db.Update(order.Payer)
+
 		var conf MerchantConfig
 		mid := order.PurchaseUnits[0].Payee.MerchantID
 		db.Find(&conf, "id = ?", mid)
@@ -143,18 +294,7 @@ func ConfirmAndSend(db *gorm.DB) gin.HandlerFunc {
 			db.Find(&conf)
 		}
 
-		from := mail.NewEmail(conf.EmailName, conf.EmailFrom)
-		subject := "Tickets Purchased"
-		to := mail.NewEmail(order.Payer.Name.GivenName+" "+order.Payer.Name.Surname, order.Payer.Email)
-		content := mail.NewContent("text/html", conf.EmailContent+
-			fmt.Sprintf(`<br /><br />You can download your Boarding Passes Here: <a href='https://%s/info/%s/passes/%s'>Click Here</a>`,
-				c.Request.Host, order.PurchaseUnits[0].Payee.MerchantID, r.CheckoutId))
-
-		m := mail.NewV3MailInit(from, subject, to, content)
-		request := sendgrid.GetRequest(apiKey, "/v3/mail/send", "https://api.sendgrid.com")
-		request.Method = "POST"
-		request.Body = mail.GetRequestBody(m)
-		response, err := sendgrid.API(request)
+		response, err := SendClientMail(apiKey, c.Request.Host, order.Payer.Email, &order, &conf)
 		if err != nil {
 			c.JSON(http.StatusFailedDependency, gin.H{"error": err.Error()})
 			return
@@ -163,7 +303,8 @@ func ConfirmAndSend(db *gorm.DB) gin.HandlerFunc {
 		sendNotifyEmail(apiKey, &conf, &order)
 
 		if conf.SendSMS {
-			sendTwilio(conf.NotifyNumber, "Tickets Purchased by "+order.Payer.Name.GivenName+" "+order.Payer.Name.Surname)
+			t := NewTwilio(conf.TwilioAcctSID, conf.TwilioAcctToken)
+			t.send(conf.NotifyNumber, "Tickets Purchased by "+order.Payer.Name.GivenName+" "+order.Payer.Name.Surname)
 		}
 
 		c.Status(response.StatusCode)

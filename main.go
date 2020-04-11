@@ -72,6 +72,8 @@ func main() {
 
 	router.POST("/paypal", HandlePaypalWebhook(db))
 	router.POST("/confirmed", ConfirmAndSend(db))
+	router.POST("/sendmail", Resend(db))
+	router.POST("/sendtext", SendText(db))
 	router.GET("/transaction/:transaction", GetItems(db))
 
 	srv := &http.Server{

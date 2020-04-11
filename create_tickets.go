@@ -108,7 +108,7 @@ func GetBoardingPasses(db *gorm.DB) gin.HandlerFunc {
 		// c.JSON(http.StatusOK, gin.H{"items": items, "name": name, "email": email, "payer": payerId})
 		c.Status(http.StatusOK)
 		c.Header("Content-Type", "application/pdf")
-		c.Header("Content-Disposition", `attachment; filename="boardingpasses.pdf"`)
+		c.Header("Content-Disposition", `attachment; filename="boardingpasses_`+c.Param("checkoutid")+`.pdf"`)
 		generatePdf(items, config.PassTitle, name, c.Writer)
 	}
 }

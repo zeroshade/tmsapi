@@ -171,6 +171,7 @@ type Payer struct {
 	PhoneNumber struct {
 		NationalNumber string `json:"national_number" gorm:"column:phone_number"`
 	} `json:"phone_number" gorm:"embedded"`
+	AltEmail string `json:"alt_email"`
 }
 
 type PurchaseItem struct {
