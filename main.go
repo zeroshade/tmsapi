@@ -75,6 +75,7 @@ func main() {
 	router.POST("/sendmail", Resend(db))
 	router.POST("/sendtext", SendText(db))
 	router.GET("/transaction/:transaction", GetItems(db))
+	// router.POST("/sendrefund", Refund(db))
 
 	srv := &http.Server{
 		Addr:    ":" + port,

@@ -310,3 +310,28 @@ func ConfirmAndSend(db *gorm.DB) gin.HandlerFunc {
 		c.Status(response.StatusCode)
 	}
 }
+
+func Refund(db *gorm.DB) gin.HandlerFunc {
+	type ConfReq struct {
+		CaptureID string `json:"captureId"`
+		Email     string `json:"email"`
+	}
+
+	return func(c *gin.Context) {
+		var r ConfReq
+		if err := c.ShouldBindJSON(&r); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+
+		paypalClient := internal.NewClient(internal.SANDBOX)
+		data, err := paypalClient.IssueRefund(r.CaptureID, r.Email)
+		if err != nil {
+			c.JSON(http.StatusFailedDependency, gin.H{"error": err.Error()})
+			return
+		}
+
+		log.Println(string(data))
+		c.Data(http.StatusOK, "text/plain", data)
+	}
+}

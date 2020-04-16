@@ -2,6 +2,7 @@ package internal
 
 import (
 	"bytes"
+	"encoding/base64"
 	"encoding/json"
 	"io/ioutil"
 	"log"
@@ -148,6 +149,33 @@ func (c *Client) GetCheckoutOrder(id string) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	resp, err := c.SendWithAuth(req)
+	if err != nil {
+		return nil, err
+	}
+
+	defer resp.Body.Close()
+	return ioutil.ReadAll(resp.Body)
+}
+
+func (c *Client) IssueRefund(id string, email string) ([]byte, error) {
+	type AuthAssert struct {
+		Iss   string `json:"iss"`
+		Payer string `json:"payer_id,omitempty"`
+		Email string `json:"email,omitempty"`
+	}
+
+	auth := AuthAssert{Iss: c.ClientID, Email: email}
+	data, err := json.Marshal(&auth)
+	if err != nil {
+		return nil, err
+	}
+
+	authAssert := base64.StdEncoding.EncodeToString([]byte(`{"alg":"none"}`)) + "." + base64.StdEncoding.EncodeToString(data) + "."
+	req, err := http.NewRequest(http.MethodPost, c.APIBase+"/v2/payments/captures/"+id+"/refund", bytes.NewReader([]byte{'{', '}'}))
+	req.Header.Add("PayPal-Auth-Assertion", authAssert)
+	req.Header.Add("Content-Type", "application/json")
 
 	resp, err := c.SendWithAuth(req)
 	if err != nil {
