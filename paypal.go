@@ -6,6 +6,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -303,8 +304,12 @@ func GetItems(db *gorm.DB) gin.HandlerFunc {
 // HandlePaypalWebhook returns a handler function that verifies a paypal webhook
 // post request and then processes the event message
 func HandlePaypalWebhook(db *gorm.DB) gin.HandlerFunc {
+	env := internal.SANDBOX
+	if strings.ToLower(os.Getenv("PAYPAL_ENV")) == "live" {
+		env = internal.LIVE
+	}
 	return func(c *gin.Context) {
-		paypalClient := internal.NewClient(internal.SANDBOX)
+		paypalClient := internal.NewClient(env)
 		verified := paypalClient.VerifyWebHookSig(c.Request, WebhookID)
 
 		if !verified {

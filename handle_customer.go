@@ -158,6 +158,11 @@ func SendText(db *gorm.DB) gin.HandlerFunc {
 		Phone      string `json:"phone"`
 	}
 
+	env := internal.SANDBOX
+	if strings.ToLower(os.Getenv("PAYPAL_ENV")) == "live" {
+		env = internal.LIVE
+	}
+
 	return func(c *gin.Context) {
 		var r Req
 		if err := c.ShouldBindJSON(&r); err != nil {
@@ -165,7 +170,7 @@ func SendText(db *gorm.DB) gin.HandlerFunc {
 			return
 		}
 
-		paypalClient := internal.NewClient(internal.SANDBOX)
+		paypalClient := internal.NewClient(env)
 		data, err := paypalClient.GetCheckoutOrder(r.CheckoutID)
 		if err != nil {
 			c.JSON(http.StatusFailedDependency, gin.H{"error": err.Error()})
