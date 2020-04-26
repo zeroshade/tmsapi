@@ -204,6 +204,10 @@ func Resend(db *gorm.DB) gin.HandlerFunc {
 	}
 
 	apiKey := os.Getenv("SENDGRID_API_KEY")
+	env := internal.SANDBOX
+	if strings.ToLower(os.Getenv("PAYPAL_ENV")) == "live" {
+		env = internal.LIVE
+	}
 
 	return func(c *gin.Context) {
 		var r Req
@@ -212,7 +216,7 @@ func Resend(db *gorm.DB) gin.HandlerFunc {
 			return
 		}
 
-		paypalClient := internal.NewClient(internal.SANDBOX)
+		paypalClient := internal.NewClient(env)
 		data, err := paypalClient.GetCheckoutOrder(r.CheckoutID)
 		if err != nil {
 			c.JSON(http.StatusFailedDependency, gin.H{"error": err.Error()})
@@ -251,6 +255,10 @@ func ConfirmAndSend(db *gorm.DB) gin.HandlerFunc {
 
 	apiKey := os.Getenv("SENDGRID_API_KEY")
 
+	env := internal.SANDBOX
+	if strings.ToLower(os.Getenv("PAYPAL_ENV")) == "live" {
+		env = internal.LIVE
+	}
 	return func(c *gin.Context) {
 		var r ConfReq
 		if err := c.ShouldBindJSON(&r); err != nil {
@@ -258,12 +266,14 @@ func ConfirmAndSend(db *gorm.DB) gin.HandlerFunc {
 			return
 		}
 
-		paypalClient := internal.NewClient(internal.SANDBOX)
+		paypalClient := internal.NewClient(env)
 		data, err := paypalClient.GetCheckoutOrder(r.CheckoutId)
 		if err != nil {
 			c.JSON(http.StatusFailedDependency, gin.H{"error": err.Error()})
 			return
 		}
+
+		log.Println(string(data))
 
 		var order CheckoutOrder
 		if err := json.Unmarshal(data, &order); err != nil {
@@ -271,6 +281,7 @@ func ConfirmAndSend(db *gorm.DB) gin.HandlerFunc {
 			return
 		}
 
+		log.Println(order)
 		db.Save(&order)
 
 		re := regexp.MustCompile(`(\d+)[A-Z]+(\d{10})`)
