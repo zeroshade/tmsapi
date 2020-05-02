@@ -423,7 +423,7 @@ func HandlePaypalWebhook(db *gorm.DB) gin.HandlerFunc {
 
 						tm := time.Unix(timestamp, 0).In(timeloc)
 
-						db.Debug().Model(ManualOverride{}).Where("product_id = ? AND time = ?", pid, tm).
+						db.Model(ManualOverride{}).Where("product_id = ? AND time = ?", pid, tm).
 							UpdateColumn("avail", gorm.Expr("avail + ?", i.Quantity))
 					}
 				}
