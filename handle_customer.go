@@ -273,15 +273,12 @@ func ConfirmAndSend(db *gorm.DB) gin.HandlerFunc {
 			return
 		}
 
-		log.Println(string(data))
-
 		var order CheckoutOrder
 		if err := json.Unmarshal(data, &order); err != nil {
 			c.JSON(http.StatusFailedDependency, gin.H{"error": err.Error()})
 			return
 		}
 
-		log.Println(order)
 		db.Save(&order)
 
 		re := regexp.MustCompile(`(\d+)[A-Z]+(\d{10})`)
@@ -299,7 +296,7 @@ func ConfirmAndSend(db *gorm.DB) gin.HandlerFunc {
 			}
 		}
 
-		db.Update(order.Payer)
+		db.Model(order.Payer).Update(*order.Payer)
 
 		var conf MerchantConfig
 		mid := order.PurchaseUnits[0].Payee.MerchantID
@@ -327,7 +324,7 @@ func ConfirmAndSend(db *gorm.DB) gin.HandlerFunc {
 	}
 }
 
-func Refund(db *gorm.DB) gin.HandlerFunc {
+func RefundReq(db *gorm.DB) gin.HandlerFunc {
 	type ConfReq struct {
 		CaptureID string `json:"captureId"`
 		Email     string `json:"email"`

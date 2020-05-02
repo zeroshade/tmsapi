@@ -134,7 +134,8 @@ func GetSoldTickets(db *gorm.DB) gin.HandlerFunc {
 		db.Table("purchase_units as pu").
 			Select("pid, tm as stamp, sum(q) as qty").
 			Joins("RIGHT JOIN ? as sub ON pu.checkout_id = sub.checkout_id", sub).
-			Where("pu.payee_merchant_id IN (?) AND tm BETWEEN TO_TIMESTAMP(?) AND TO_TIMESTAMP(?)",
+			Joins("LEFT JOIN checkout_orders AS co ON pu.checkout_id = co.id").
+			Where("pu.payee_merchant_id IN (?) AND tm BETWEEN TO_TIMESTAMP(?) AND TO_TIMESTAMP(?) AND co.status != 'REFUNDED'",
 				ids, c.Param("from"), c.Param("to")).
 			Group("pid, tm").Scan(&out)
 

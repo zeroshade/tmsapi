@@ -6,6 +6,8 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -97,6 +99,8 @@ func (w *WebHookEvent) UnmarshalJSON(data []byte) error {
 		aux.Resource = new(CheckoutOrder)
 	case "capture":
 		aux.Resource = new(Capture)
+	case "refund":
+		aux.Resource = new(Refund)
 	}
 
 	w.RawMessage = postgres.Jsonb{json.RawMessage(data)}
@@ -169,9 +173,11 @@ type Payer struct {
 	Address struct {
 		CountryCode string `json:"country_code"`
 	} `json:"address" gorm:"-"`
-	PhoneNumber struct {
-		NationalNumber string `json:"national_number" gorm:"column:phone_number"`
-	} `json:"phone_number" gorm:"embedded"`
+	Phone struct {
+		PhoneNumber struct {
+			NationalNumber string `json:"national_number" gorm:"column:phone_number"`
+		} `json:"phone_number" gorm:"embedded"`
+	} `json:"phone" gorm:"embedded"`
 	AltEmail string `json:"alt_email"`
 }
 
@@ -283,6 +289,20 @@ type Sale struct {
 	RelatedTrans    []*Transaction `json:"-" gorm:"many2many:transaction_related"`
 }
 
+type Refund struct {
+	CUTime
+	ID        string `json:"id" gorm:"primary_key"`
+	Links     []link `json:"links"`
+	Amount    Amount `json:"amount" gorm:"embedded"`
+	Status    string `json:"status"`
+	Breakdown struct {
+		Net       Amount `json:"net_amount" gorm:"embedded;embedded_prefix:net_"`
+		PayPalFee Amount `json:"paypal_fee" gorm:"embedded;embedded_prefix:fee_"`
+		Gross     Amount `json:"gross_amount" gorm:"embedded;embedded_prefix:gross_"`
+		Total     Amount `json:"total_refunded_amount" gorm:"embedded"`
+	} `json:"seller_payable_breakdown" gorm:"embedded;embedded_prefix:refund_"`
+}
+
 // WebhookID is the constant id from PayPal for this webhook
 var WebhookID string
 
@@ -331,27 +351,77 @@ func HandlePaypalWebhook(db *gorm.DB) gin.HandlerFunc {
 
 		db.Save(&we)
 
-		p, ok := we.Resource.(*Payment)
-		if ok {
+		switch val := we.Resource.(type) {
+		case *Payment:
 			count := 0
-			db.Model(&Payment{}).Where("id = ?", p.ID).Count(&count)
-			if count <= 0 {
-				db.Create(we.Resource)
-				c.Status(http.StatusOK)
-				return
-			}
-		}
-
-		cap, ok := we.Resource.(*Capture)
-		if ok {
-			count := 0
-			db.Model(&Capture{}).Where("id = ?", cap.ID).Count(&count)
+			db.Model(&Payment{}).Where("id = ?", val.ID).Count(&count)
 			if count <= 0 {
 				db.Create(we.Resource)
 				c.Status(http.StatusOK)
 			}
 			return
+		case *Capture:
+			count := 0
+			db.Model(&Capture{}).Where("id = ?", val.ID).Count(&count)
+			if count <= 0 {
+				db.Create(we.Resource)
+				c.Status(http.StatusOK)
+			}
+			return
+		case *Refund:
+			db.Create(we.Resource)
+			for _, l := range val.Links {
+				if l.Rel == "up" {
+					req, err := http.NewRequest(l.Method, l.Href, nil)
+					if err != nil {
+						log.Println(err)
+						c.Status(http.StatusFailedDependency)
+						return
+					}
+
+					resp, err := paypalClient.SendWithAuth(req)
+					if err != nil {
+						log.Println(err)
+						c.Status(http.StatusFailedDependency)
+						return
+					}
+					defer resp.Body.Close()
+
+					data, err := ioutil.ReadAll(resp.Body)
+					if err != nil {
+						log.Println(err)
+						c.Status(http.StatusFailedDependency)
+						return
+					}
+
+					var capture Capture
+					if err := json.Unmarshal(data, &capture); err != nil {
+						log.Println(err)
+						c.Status(http.StatusFailedDependency)
+						return
+					}
+
+					db.Model(&capture).Update("status", "REFUNDED")
+					db.Model(&CheckoutOrder{}).Where("id = ?", capture.CheckoutID).Update("status", "REFUNDED")
+
+					var items []PurchaseItem
+					db.Find(&items, "checkout_id = ?", capture.CheckoutID)
+
+					re := regexp.MustCompile(`(\d+)[A-Z]+(\d{10})`)
+					for _, i := range items {
+						res := re.FindStringSubmatch(i.Sku)
+						pid, _ := strconv.Atoi(res[1])
+						timestamp, _ := strconv.ParseInt(res[2], 10, 64)
+
+						tm := time.Unix(timestamp, 0).In(timeloc)
+
+						db.Model(ManualOverride{}).Where("product_id = ? AND time = ?", pid, tm).
+							UpdateColumn("avail", gorm.Expr("avail + ?", i.Quantity))
+					}
+				}
+			}
 		}
+
 		db.Save(we.Resource)
 		c.Status(http.StatusOK)
 	}

@@ -30,7 +30,7 @@ func main() {
 	db.AutoMigrate(&Product{}, &Schedule{}, &ScheduleTime{}, &TicketCategory{}, &Report{},
 		&Transaction{}, &Payment{}, &Sale{}, &PayerInfo{}, &WebHookEvent{}, &Item{}, &SandboxInfo{},
 		&CheckoutOrder{}, &Payer{}, &PurchaseItem{}, &PurchaseUnit{}, &Capture{}, &MerchantConfig{},
-		&ManualOverride{})
+		&ManualOverride{}, &Refund{})
 	db.Model(&Schedule{}).Association("TimeArray")
 	db.Model(&Schedule{}).Association("NotAvail")
 	db.Model(&Payment{}).Association("Payer.PayerInfo")
@@ -75,7 +75,7 @@ func main() {
 	router.POST("/sendmail", Resend(db))
 	router.POST("/sendtext", SendText(db))
 	router.GET("/transaction/:transaction", GetItems(db))
-	// router.POST("/sendrefund", Refund(db))
+	router.POST("/sendrefund", RefundReq(db))
 
 	srv := &http.Server{
 		Addr:    ":" + port,
