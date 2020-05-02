@@ -394,6 +394,8 @@ func HandlePaypalWebhook(db *gorm.DB) gin.HandlerFunc {
 						return
 					}
 
+					log.Println(string(data))
+
 					var capture Capture
 					if err := json.Unmarshal(data, &capture); err != nil {
 						log.Println(err)
@@ -401,8 +403,8 @@ func HandlePaypalWebhook(db *gorm.DB) gin.HandlerFunc {
 						return
 					}
 
-					db.Model(&capture).Update("status", "REFUNDED")
-					db.Model(&CheckoutOrder{}).Where("id = ?", capture.CheckoutID).Update("status", "REFUNDED")
+					db.Debug().Model(&capture).Update("status", "REFUNDED")
+					db.Debug().Model(&CheckoutOrder{}).Where("id = ?", capture.CheckoutID).Update("status", "REFUNDED")
 
 					var items []PurchaseItem
 					db.Find(&items, "checkout_id = ?", capture.CheckoutID)
@@ -415,7 +417,7 @@ func HandlePaypalWebhook(db *gorm.DB) gin.HandlerFunc {
 
 						tm := time.Unix(timestamp, 0).In(timeloc)
 
-						db.Model(ManualOverride{}).Where("product_id = ? AND time = ?", pid, tm).
+						db.Debug().Model(ManualOverride{}).Where("product_id = ? AND time = ?", pid, tm).
 							UpdateColumn("avail", gorm.Expr("avail + ?", i.Quantity))
 					}
 				}
