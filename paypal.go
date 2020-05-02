@@ -369,6 +369,13 @@ func HandlePaypalWebhook(db *gorm.DB) gin.HandlerFunc {
 			}
 			return
 		case *Refund:
+			count := 0
+			db.Model(&Refund{}).Where("id = ?", val.ID).Count(&count)
+			if count > 0 {
+				log.Println("Repeated Refund, already proccessed")
+				c.Status(http.StatusOK)
+				return
+			}
 			db.Create(we.Resource)
 			for _, l := range val.Links {
 				if l.Rel == "up" {
@@ -394,8 +401,6 @@ func HandlePaypalWebhook(db *gorm.DB) gin.HandlerFunc {
 						return
 					}
 
-					log.Println(string(data))
-
 					var capture Capture
 					if err := json.Unmarshal(data, &capture); err != nil {
 						log.Println(err)
@@ -403,8 +408,9 @@ func HandlePaypalWebhook(db *gorm.DB) gin.HandlerFunc {
 						return
 					}
 
-					db.Debug().Model(&capture).Update("status", "REFUNDED")
-					db.Debug().Model(&CheckoutOrder{}).Where("id = ?", capture.CheckoutID).Update("status", "REFUNDED")
+					db.Model(&capture).Update("status", "REFUNDED")
+					db.Find(&capture)
+					db.Model(&CheckoutOrder{}).Where("id = ?", capture.CheckoutID).Update("status", "REFUNDED")
 
 					var items []PurchaseItem
 					db.Find(&items, "checkout_id = ?", capture.CheckoutID)
