@@ -77,7 +77,7 @@ func generatePdf(items []PurchaseItem, passTitle, name string, w io.Writer) {
 	pdf.SetTitle("Boarding Passes", false)
 	for _, i := range items {
 		pdf.AddPage()
-		for n := uint(0); n < i.Quantity; n++ {
+		for n := uint(1); n <= i.Quantity; n++ {
 			qrname := fmt.Sprintf("%s-%s-%d", i.CheckoutID, i.Sku, n)
 			data, _ := qrcode.Encode(qrname, qrcode.High, 50)
 			pdf.RegisterImageOptionsReader(qrname, opt, bytes.NewReader(data))
