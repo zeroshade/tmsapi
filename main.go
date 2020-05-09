@@ -30,7 +30,7 @@ func main() {
 	db.AutoMigrate(&Product{}, &Schedule{}, &ScheduleTime{}, &TicketCategory{}, &Report{},
 		&Transaction{}, &Payment{}, &Sale{}, &PayerInfo{}, &WebHookEvent{}, &Item{}, &SandboxInfo{},
 		&CheckoutOrder{}, &Payer{}, &PurchaseItem{}, &PurchaseUnit{}, &Capture{}, &MerchantConfig{},
-		&ManualOverride{}, &Refund{})
+		&ManualOverride{}, &Refund{}, &Boat{})
 	db.Model(&Schedule{}).Association("TimeArray")
 	db.Model(&Schedule{}).Association("NotAvail")
 	db.Model(&Payment{}).Association("Payer.PayerInfo")

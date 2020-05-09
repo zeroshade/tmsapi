@@ -12,6 +12,62 @@ func addProductRoutes(router *gin.RouterGroup, db *gorm.DB) {
 	router.GET("/", GetProducts(db))
 	router.PUT("/product", checkJWT(), SaveProduct(db))
 	router.DELETE("/product/:prodid", checkJWT(), DeleteProduct(db))
+	router.GET("/boats", getBoats(db))
+	router.PUT("/boats", checkJWT(), modifyBoat(db))
+	router.POST("/boats", checkJWT(), createBoat(db))
+	router.DELETE("/boats", checkJWT(), deleteBoat(db))
+}
+
+type Boat struct {
+	ID   int    `json:"id" gorm:"primary key;default:1"`
+	Name string `json:"name"`
+}
+
+func getBoats(db *gorm.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		var boats []Boat
+		db.Find(&boats)
+		c.JSON(http.StatusOK, boats)
+	}
+}
+
+func modifyBoat(db *gorm.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		var boat Boat
+		if err := c.ShouldBindJSON(&boat); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+
+		db.Save(&boat)
+		c.Status(http.StatusOK)
+	}
+}
+
+func createBoat(db *gorm.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		var boat Boat
+		if err := c.ShouldBindJSON(&boat); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+
+		db.Create(&boat)
+		c.Status(http.StatusOK)
+	}
+}
+
+func deleteBoat(db *gorm.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		var boat Boat
+		if err := c.ShouldBindJSON(&boat); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+
+		db.Delete(&boat)
+		c.Status(http.StatusOK)
+	}
 }
 
 // Product represents a specific Type of tickets sold
@@ -28,6 +84,8 @@ type Product struct {
 	ShowTickets bool       `json:"showTickets"`
 	Schedules   []Schedule `json:"schedList"`
 	Fish        string     `json:"fish"`
+	Boat        *Boat      `json:"-"`
+	BoatID      uint       `json:"boatId" gorm:"default:1"`
 }
 
 // SaveProduct exports a handler for reading in a product and saving it to the db
@@ -53,7 +111,7 @@ func SaveProduct(db *gorm.DB) gin.HandlerFunc {
 func GetProducts(db *gorm.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var prods []Product
-		db.Preload("Schedules").Preload("Schedules.TimeArray").Order("name asc").Find(&prods, "merchant_id = ?", c.Param("merchantid"))
+		db.Preload("Boat").Preload("Schedules").Preload("Schedules.TimeArray").Order("name asc").Find(&prods, "merchant_id = ?", c.Param("merchantid"))
 		c.JSON(http.StatusOK, prods)
 	}
 }
