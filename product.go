@@ -19,8 +19,9 @@ func addProductRoutes(router *gin.RouterGroup, db *gorm.DB) {
 }
 
 type Boat struct {
-	ID   int    `json:"id" gorm:"primary key;default:1"`
-	Name string `json:"name"`
+	ID    int    `json:"id" gorm:"primary key;default:1"`
+	Name  string `json:"name"`
+	Color string `json:"color"`
 }
 
 func getBoats(db *gorm.DB) gin.HandlerFunc {

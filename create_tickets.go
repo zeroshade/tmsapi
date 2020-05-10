@@ -2,9 +2,12 @@ package main
 
 import (
 	"bytes"
+	"encoding/hex"
 	"fmt"
 	"io"
 	"net/http"
+	"regexp"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/jinzhu/gorm"
@@ -16,7 +19,9 @@ const passHeight = 65
 const left = 5
 const spaceBetween = 15
 
-func drawPass(f *gofpdf.Fpdf, item *PurchaseItem, passTitle, name, qrname string) {
+var skuRe = regexp.MustCompile(`(\d+)([A-Z]+)(\d{10})\d*`)
+
+func drawPass(f *gofpdf.Fpdf, item *PurchaseItem, passTitle string, boat *Boat, name, tkt, qrname string) {
 	var opt gofpdf.ImageOptions
 	opt.ImageType = "png"
 
@@ -29,7 +34,13 @@ func drawPass(f *gofpdf.Fpdf, item *PurchaseItem, passTitle, name, qrname string
 		starty = f.GetY()
 	}
 
-	f.SetFillColor(59, 0, 220)
+	colorBytes, _ := hex.DecodeString(boat.Color)
+	red := int(colorBytes[0])
+	green := int(colorBytes[1])
+	blue := int(colorBytes[2])
+
+	f.SetFillColor(red, green, blue)
+	f.SetDrawColor(red, green, blue)
 	f.Rect(left, starty, 205, passHeight, "D")
 	f.SetX(left)
 	f.SetFont("Courier", "B", 18)
@@ -37,28 +48,32 @@ func drawPass(f *gofpdf.Fpdf, item *PurchaseItem, passTitle, name, qrname string
 	f.CellFormat(205, 7, passTitle, "B", 1, "C", true, 0, "")
 
 	f.SetTextColor(0, 0, 0)
-	f.SetFont("Courier", "", 18)
+	f.SetFont("Courier", "B", 16)
 	f.SetX(left)
 	f.Cell(40, 7, "Boarding Pass")
-	f.SetX(-55)
-	f.Cell(40, 7, item.Name)
+	f.SetX(-53)
+	f.Cell(40, 7, tkt+" Ticket")
 
 	f.Ln(-1)
+	f.SetFont("Courier", "B", 16)
+	f.SetTextColor(red, green, blue)
 	f.SetX(left)
-	x, y := f.GetXY()
-	f.Line(x, y, 210, y)
-
-	f.SetFont("Arial", "B", 14)
-	f.Cell(40, 10, "Trip:")
-	f.SetFont("Arial", "", 14)
-	f.Cell(100, 10, item.Description)
+	f.Cell(40, 7, boat.Name)
+	f.SetTextColor(0, 0, 0)
 
 	f.Ln(-1)
+	f.SetFont("Courier", "B", 14)
 	f.SetX(left)
-	f.SetFont("Arial", "B", 14)
-	f.Cell(40, 8, "Purchased By:")
-	f.SetFont("Arial", "", 14)
-	f.Cell(50, 8, name)
+	f.Cell(40, 7, "Trip:")
+	f.SetFont("Courier", "", 14)
+	f.Cell(100, 7, item.Description)
+
+	f.Ln(15)
+	f.SetX(left)
+	f.SetFont("Courier", "B", 14)
+	f.Cell(40, 7, "Purchased By:")
+	f.SetFont("Courier", "", 14)
+	f.Cell(50, 7, name)
 
 	f.Ln(20)
 	f.SetFont("Courier", "I", 8)
@@ -69,19 +84,29 @@ func drawPass(f *gofpdf.Fpdf, item *PurchaseItem, passTitle, name, qrname string
 	f.SetXY(0, starty+passHeight+spaceBetween)
 }
 
-func generatePdf(items []PurchaseItem, passTitle, name string, w io.Writer) {
+func generatePdf(db *gorm.DB, items []PurchaseItem, passTitle, name string, w io.Writer) {
 	var opt gofpdf.ImageOptions
 	opt.ImageType = "png"
 
 	pdf := gofpdf.New("P", "mm", "Letter", ".")
 	pdf.SetTitle("Boarding Passes", false)
+
 	for _, i := range items {
+		skuPieces := skuRe.FindAllStringSubmatch(i.Sku, -1)
+
+		pid := skuPieces[0][1]
+
+		var prod Product
+		db.Preload("Boat").Find(&prod, "id = ?", pid)
+
+		tkt := strings.Title(strings.ToLower(skuPieces[0][2]))
+
 		pdf.AddPage()
 		for n := uint(1); n <= i.Quantity; n++ {
 			qrname := fmt.Sprintf("%s-%s-%d", i.CheckoutID, i.Sku, n)
 			data, _ := qrcode.Encode(qrname, qrcode.High, 50)
 			pdf.RegisterImageOptionsReader(qrname, opt, bytes.NewReader(data))
-			drawPass(pdf, &i, passTitle, name, qrname)
+			drawPass(pdf, &i, passTitle, prod.Boat, name, tkt, qrname)
 		}
 	}
 	pdf.Output(w)
@@ -109,6 +134,6 @@ func GetBoardingPasses(db *gorm.DB) gin.HandlerFunc {
 		c.Status(http.StatusOK)
 		c.Header("Content-Type", "application/pdf")
 		c.Header("Content-Disposition", `attachment; filename="boardingpasses_`+c.Param("checkoutid")+`.pdf"`)
-		generatePdf(items, config.PassTitle, name, c.Writer)
+		generatePdf(db, items, config.PassTitle, name, c.Writer)
 	}
 }

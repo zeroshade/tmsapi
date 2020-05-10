@@ -86,13 +86,13 @@ func GetCheckouts(db *gorm.DB) gin.HandlerFunc {
 
 func TripsOnDay(d string) func(db *gorm.DB) *gorm.DB {
 	return func(db *gorm.DB) *gorm.DB {
-		return db.Where("date_trunc('day', TO_TIMESTAMP(SUBSTRING(sku FROM '\\d[A-Z]+(\\d{10})\\d*')::INTEGER)) = ?", d)
+		return db.Where("date_trunc('day', TO_TIMESTAMP(SUBSTRING(sku FROM '\\d+[A-Z]+(\\d{10})\\d*')::INTEGER)) = ?", d)
 	}
 }
 
 func TripTime(d string) func(db *gorm.DB) *gorm.DB {
 	return func(db *gorm.DB) *gorm.DB {
-		return db.Where("SUBSTRING(sku FROM '\\d[A-Z]+(\\d{10})\\d*') = ?", d)
+		return db.Where("SUBSTRING(sku FROM '\\d+[A-Z]+(\\d{10})\\d*') = ?", d)
 	}
 }
 
@@ -122,7 +122,7 @@ func OrdersTimestamp(db *gorm.DB) gin.HandlerFunc {
 			Joins("LEFT JOIN checkout_orders as co ON pi.checkout_id = co.id").
 			Joins("LEFT JOIN captures as cap USING(checkout_id)").
 			Joins("LEFT JOIN payers as pa ON co.payer_id = pa.id").
-			Where("(pu.payee_merchant_id = ? OR pu.payee_merchant_id = ANY (?)) AND SUBSTRING(sku FROM '\\d[A-Z]+(\\d{10})\\d*') = ?",
+			Where("(pu.payee_merchant_id = ? OR pu.payee_merchant_id = ANY (?)) AND SUBSTRING(sku FROM '\\d+[A-Z]+(\\d{10})\\d*') = ?",
 				c.Param("merchantid"), sids, c.Param("timestamp")).
 			Select("pi.name, co.payer_id, pi.checkout_id as coid, sku, pi.description, pi.value, given_name || ' ' || surname as payer, email, phone_number, quantity, cap.status").
 			Scan(&ret)
