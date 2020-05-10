@@ -19,7 +19,7 @@ func addProductRoutes(router *gin.RouterGroup, db *gorm.DB) {
 }
 
 type Boat struct {
-	ID    int    `json:"id" gorm:"primary key;default:1"`
+	ID    int    `json:"id" gorm:"primary key"`
 	Name  string `json:"name"`
 	Color string `json:"color"`
 }
