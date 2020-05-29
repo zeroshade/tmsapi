@@ -122,7 +122,10 @@ func GetBoardingPasses(db *gorm.DB) gin.HandlerFunc {
 		var email string
 		var payerId string
 
-		db.Where("checkout_id = ?", c.Param("checkoutid")).Find(&items)
+		db.Where("checkout_id = ?", c.Param("checkoutid")).
+			Select([]string{"checkout_id", "sku", "name", "value", "quantity",
+				`COALESCE(NULLIF(description, ''), SUBSTRING(name from '\w* Ticket, [^,]*, (.*)')) as description`}).
+			Find(&items)
 
 		db.Table("checkout_orders as co").
 			Joins("LEFT JOIN payers as p ON co.payer_id = p.id").
