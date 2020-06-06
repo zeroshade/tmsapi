@@ -27,7 +27,7 @@ type ManualOverride struct {
 	ProductID uint      `json:"pid" gorm:"primary_key"`
 	Time      time.Time `json:"time" gorm:"primary_key"`
 	Cancelled bool      `json:"cancelled"`
-	Avail     uint      `json:"avail"`
+	Avail     int       `json:"avail"`
 }
 
 func getOverrideRange(db *gorm.DB) gin.HandlerFunc {
