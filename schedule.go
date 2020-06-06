@@ -79,8 +79,8 @@ type Schedule struct {
 	ProductID    uint           `json:"-"`
 	ID           uint           `json:"id" gorm:"primary_key"`
 	TicketsAvail uint           `json:"ticketsAvail"`
-	Start        string         `json:"start"`
-	End          string         `json:"end"`
+	Start        time.Time      `json:"-"`
+	End          time.Time      `json:"-"`
 	TimeArray    []ScheduleTime `json:"timeArray"`
 	Days         pq.Int64Array  `json:"selectedDays" gorm:"type:integer[]"`
 	NotAvail     pq.StringArray `json:"notAvailArray,nilasempty" gorm:"type:text[]"`
@@ -105,8 +105,12 @@ func (s *Schedule) MarshalJSON() ([]byte, error) {
 	}
 	return json.Marshal(&struct {
 		*Alias
+		StartDay string `json:"start"`
+		EndDay   string `json:"end"`
 	}{
-		Alias: (*Alias)(s),
+		Alias:    (*Alias)(s),
+		StartDay: s.Start.Format("2006-01-02"),
+		EndDay:   s.End.Format("2006-01-02"),
 	})
 }
 

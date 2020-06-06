@@ -16,13 +16,23 @@ import (
 	_ "github.com/jinzhu/gorm/dialects/postgres"
 )
 
+var loc *time.Location
+
+func init() {
+	var err error
+	loc, err = time.LoadLocation("America/New_York")
+	if err != nil {
+		panic(err)
+	}
+}
+
 func main() {
 	URI := os.Getenv("DATABASE_URL")
 	if URI == "" {
 		log.Fatal("must set $DATABASE_URL")
 	}
 
-	db, err := gorm.Open("postgres", URI)
+	db, err := gorm.Open("postgres", URI+"?timezone=America/New_York")
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -45,7 +55,7 @@ func main() {
 		log.Fatal(err)
 	}
 
-	db.Exec("SET TIME ZONE 'America/New_York'")
+	// db.Exec("SET TIME ZONE 'America/New_York'")
 
 	port := os.Getenv("PORT")
 	if port == "" {
