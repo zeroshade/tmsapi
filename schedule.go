@@ -97,6 +97,30 @@ func (s *Schedule) AfterUpdate(tx *gorm.DB) (err error) {
 	return
 }
 
+func (s *Schedule) UnmarshalJSON(data []byte) (err error) {
+	type Alias Schedule
+	aux := &struct {
+		*Alias
+		StartDay string `json:"start"`
+		EndDay   string `json:"end"`
+	}{
+		Alias: (*Alias)(s),
+	}
+
+	if err = json.Unmarshal(data, &aux); err != nil {
+		return
+	}
+
+	if s.Start, err = time.ParseInLocation("2006-01-02", aux.StartDay, loc); err != nil {
+		return
+	}
+	if s.End, err = time.ParseInLocation("2006-01-02", aux.EndDay, loc); err != nil {
+		return
+	}
+
+	return
+}
+
 // MarshalJSON handles the proper date formatting for schedules
 func (s *Schedule) MarshalJSON() ([]byte, error) {
 	type Alias Schedule
