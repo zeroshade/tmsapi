@@ -8,6 +8,7 @@ import (
 	"github.com/jinzhu/gorm"
 	"github.com/jinzhu/gorm/dialects/postgres"
 	"github.com/lib/pq"
+	"github.com/zeroshade/tmsapi/types"
 )
 
 func addTicketRoutes(router *gin.RouterGroup, db *gorm.DB) {
@@ -66,17 +67,17 @@ func SaveTicketCats(db *gorm.DB) gin.HandlerFunc {
 
 func GetCheckouts(db *gorm.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		var orders []*CheckoutOrder
-		var units []PurchaseUnit
+		var orders []*types.CheckoutOrder
+		var units []types.PurchaseUnit
 		db.Where("payee_merchant_id = ?", c.Param("merchantid")).Find(&units)
 
 		for idx := range units {
 			db.Where("checkout_id = ?", units[idx].CheckoutID).Find(&units[idx].Payments.Captures)
 			db.Where("checkout_id = ?", units[idx].CheckoutID).Find(&units[idx].Items)
 
-			o := &CheckoutOrder{}
+			o := &types.CheckoutOrder{}
 			db.Preload("Payer").Find(o, "id = ?", units[idx].CheckoutID)
-			o.PurchaseUnits = []PurchaseUnit{units[idx]}
+			o.PurchaseUnits = []types.PurchaseUnit{units[idx]}
 			orders = append(orders, o)
 		}
 
@@ -133,14 +134,14 @@ func OrdersTimestamp(db *gorm.DB) gin.HandlerFunc {
 
 func GetPurchases(db *gorm.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		var ret []PurchaseItem
+		var ret []types.PurchaseItem
 		db.Table("purchase_items as pi").Scopes(TripsOnDay(c.Param("date"))).
 			Select("pi.*").
 			Joins("LEFT JOIN purchase_units as pu ON pi.checkout_id = pu.checkout_id").
 			Where("pu.payee_merchant_id = ?", c.Param("merchantid")).
 			Scan(&ret)
 
-		checkouts := make(map[string]*CheckoutOrder)
+		checkouts := make(map[string]*types.CheckoutOrder)
 		for _, i := range ret {
 			checkouts[i.CheckoutID] = nil
 		}
@@ -150,7 +151,7 @@ func GetPurchases(db *gorm.DB) gin.HandlerFunc {
 			ids = append(ids, k)
 		}
 
-		var co []CheckoutOrder
+		var co []types.CheckoutOrder
 		db.Preload("Payer").Where("id in (?)", ids).Find(&co)
 
 		for idx := range co {
@@ -182,7 +183,7 @@ func GetOrders(db *gorm.DB) gin.HandlerFunc {
 
 		var count uint
 
-		var ret []PurchaseItem
+		var ret []types.PurchaseItem
 		scope := db.Table("purchase_items as pi").
 			Select("pi.*").
 			Joins("LEFT JOIN purchase_units as pu ON pi.checkout_id = pu.checkout_id").
@@ -211,7 +212,7 @@ func GetOrders(db *gorm.DB) gin.HandlerFunc {
 
 		scope.Scan(&ret)
 
-		checkouts := make(map[string]*CheckoutOrder)
+		checkouts := make(map[string]*types.CheckoutOrder)
 		for _, i := range ret {
 			checkouts[i.CheckoutID] = nil
 		}
@@ -221,7 +222,7 @@ func GetOrders(db *gorm.DB) gin.HandlerFunc {
 			ids = append(ids, k)
 		}
 
-		var co []CheckoutOrder
+		var co []types.CheckoutOrder
 		db.Preload("Payer").Where("id in (?)", ids).Find(&co)
 
 		for idx := range co {

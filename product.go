@@ -6,6 +6,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/jinzhu/gorm"
+	"github.com/zeroshade/tmsapi/types"
 )
 
 func addProductRoutes(router *gin.RouterGroup, db *gorm.DB) {
@@ -73,20 +74,20 @@ func deleteBoat(db *gorm.DB) gin.HandlerFunc {
 
 // Product represents a specific Type of tickets sold
 type Product struct {
-	ID          uint       `json:"id" gorm:"primary_key"`
-	MerchantID  string     `json:"-" gorm:"type:varchar;not null;primary_key;"`
-	CreatedAt   time.Time  `json:"-"`
-	UpdatedAt   time.Time  `json:"-"`
-	DeletedAt   *time.Time `json:"-"`
-	Name        string     `json:"name"`
-	Desc        string     `json:"desc"`
-	Color       string     `json:"color"`
-	Publish     bool       `json:"publish"`
-	ShowTickets bool       `json:"showTickets"`
-	Schedules   []Schedule `json:"schedList"`
-	Fish        string     `json:"fish"`
-	Boat        *Boat      `json:"-"`
-	BoatID      uint       `json:"boatId" gorm:"default:1"`
+	ID          uint             `json:"id" gorm:"primary_key"`
+	MerchantID  string           `json:"-" gorm:"type:varchar;not null;primary_key;"`
+	CreatedAt   time.Time        `json:"-"`
+	UpdatedAt   time.Time        `json:"-"`
+	DeletedAt   *time.Time       `json:"-"`
+	Name        string           `json:"name"`
+	Desc        string           `json:"desc"`
+	Color       string           `json:"color"`
+	Publish     bool             `json:"publish"`
+	ShowTickets bool             `json:"showTickets"`
+	Schedules   []types.Schedule `json:"schedList"`
+	Fish        string           `json:"fish"`
+	Boat        *Boat            `json:"-"`
+	BoatID      uint             `json:"boatId" gorm:"default:1"`
 }
 
 // SaveProduct exports a handler for reading in a product and saving it to the db
@@ -102,7 +103,7 @@ func SaveProduct(db *gorm.DB) gin.HandlerFunc {
 		for _, s := range inprod.Schedules {
 			ids = append(ids, s.ID)
 		}
-		db.Where("product_id = ?", inprod.ID).Not("id", ids).Delete(Schedule{})
+		db.Where("product_id = ?", inprod.ID).Not("id", ids).Delete(types.Schedule{})
 
 		inprod.MerchantID = c.Param("merchantid")
 		db.Save(&inprod)

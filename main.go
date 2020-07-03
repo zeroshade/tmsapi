@@ -11,6 +11,7 @@ import (
 
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
+	"github.com/zeroshade/tmsapi/types"
 
 	"github.com/jinzhu/gorm"
 	_ "github.com/jinzhu/gorm/dialects/postgres"
@@ -37,19 +38,19 @@ func main() {
 		log.Fatal(err)
 	}
 	defer db.Close()
-	db.AutoMigrate(&Product{}, &Schedule{}, &ScheduleTime{}, &TicketCategory{}, &Report{},
-		&Transaction{}, &Payment{}, &Sale{}, &PayerInfo{}, &WebHookEvent{}, &Item{}, &SandboxInfo{},
-		&CheckoutOrder{}, &Payer{}, &PurchaseItem{}, &PurchaseUnit{}, &Capture{}, &MerchantConfig{},
-		&ManualOverride{}, &Refund{}, &Boat{})
-	db.Model(&Schedule{}).Association("TimeArray")
-	db.Model(&Schedule{}).Association("NotAvail")
-	db.Model(&Payment{}).Association("Payer.PayerInfo")
-	db.Model(&Item{}).AddForeignKey("transaction", "transactions(payment_id)", "CASCADE", "RESTRICT")
-	db.Model(&Transaction{}).AddForeignKey("payment_id", "payments(id)", "CASCADE", "RESTRICT")
+	db.AutoMigrate(&Product{}, &types.Schedule{}, &types.ScheduleTime{}, &TicketCategory{}, &Report{},
+		&types.Transaction{}, &types.Payment{}, &types.Sale{}, &types.PayerInfo{}, &types.WebHookEvent{}, &types.Item{}, &SandboxInfo{},
+		&types.CheckoutOrder{}, &types.Payer{}, &types.PurchaseItem{}, &types.PurchaseUnit{}, &types.Capture{}, &MerchantConfig{},
+		&ManualOverride{}, &types.Refund{}, &Boat{})
+	db.Model(&types.Schedule{}).Association("TimeArray")
+	db.Model(&types.Schedule{}).Association("NotAvail")
+	db.Model(&types.Payment{}).Association("Payer.PayerInfo")
+	db.Model(&types.Item{}).AddForeignKey("transaction", "transactions(payment_id)", "CASCADE", "RESTRICT")
+	db.Model(&types.Transaction{}).AddForeignKey("payment_id", "payments(id)", "CASCADE", "RESTRICT")
 	db.Table("transaction_related").AddForeignKey("transaction_payment_id", "payments(id)", "CASCADE", "RESTRICT")
 	db.Table("transaction_related").AddForeignKey("sale_id", "sales(id)", "CASCADE", "RESTRICT")
-	db.Model(&PurchaseUnit{}).AddForeignKey("checkout_id", "checkout_orders(id)", "CASCADE", "RESTRICT")
-	db.Model(&PurchaseItem{}).AddForeignKey("checkout_id", "checkout_orders(id)", "CASCADE", "RESTRICT")
+	db.Model(&types.PurchaseUnit{}).AddForeignKey("checkout_id", "checkout_orders(id)", "CASCADE", "RESTRICT")
+	db.Model(&types.PurchaseItem{}).AddForeignKey("checkout_id", "checkout_orders(id)", "CASCADE", "RESTRICT")
 
 	if err := db.Exec("CREATE EXTENSION IF NOT EXISTS hstore").Error; err != nil {
 		log.Fatal(err)
@@ -84,6 +85,7 @@ func main() {
 	router.POST("/confirmed", ConfirmAndSend(db))
 	router.POST("/sendmail", Resend(db))
 	router.POST("/sendtext", SendText(db))
+	router.POST("/capture", CaptureOrder(db))
 	router.GET("/transaction/:transaction", GetItems(db))
 	// router.POST("/sendrefund", RefundReq(db))
 

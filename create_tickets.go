@@ -13,6 +13,7 @@ import (
 	"github.com/jinzhu/gorm"
 	"github.com/jung-kurt/gofpdf"
 	"github.com/skip2/go-qrcode"
+	"github.com/zeroshade/tmsapi/types"
 )
 
 const passHeight = 65
@@ -21,7 +22,7 @@ const spaceBetween = 15
 
 var skuRe = regexp.MustCompile(`(\d+)([A-Z]+)(\d{10})\d*`)
 
-func drawPass(f *gofpdf.Fpdf, item *PurchaseItem, passTitle string, boat *Boat, name, tkt, qrname string) {
+func drawPass(f *gofpdf.Fpdf, item *types.PurchaseItem, passTitle string, boat *Boat, name, tkt, qrname string) {
 	var opt gofpdf.ImageOptions
 	opt.ImageType = "png"
 
@@ -84,7 +85,7 @@ func drawPass(f *gofpdf.Fpdf, item *PurchaseItem, passTitle string, boat *Boat, 
 	f.SetXY(0, starty+passHeight+spaceBetween)
 }
 
-func generatePdf(db *gorm.DB, items []PurchaseItem, passTitle, name string, w io.Writer) {
+func generatePdf(db *gorm.DB, items []types.PurchaseItem, passTitle, name string, w io.Writer) {
 	var opt gofpdf.ImageOptions
 	opt.ImageType = "png"
 
@@ -117,7 +118,7 @@ func GetBoardingPasses(db *gorm.DB) gin.HandlerFunc {
 		var config MerchantConfig
 		db.Find(&config, "id = ?", c.Param("merchantid"))
 
-		var items []PurchaseItem
+		var items []types.PurchaseItem
 		var name string
 		var email string
 		var payerId string

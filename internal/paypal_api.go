@@ -87,6 +87,7 @@ func (c *Client) SendWithAuth(req *http.Request) (*http.Response, error) {
 		}
 	}
 
+	req.Header.Set("Accept", "application/json")
 	req.Header.Set("Authorization", "Bearer "+c.Token.AccessToken)
 	return c.Client.Do(req)
 }
@@ -144,6 +145,21 @@ func (c *Client) VerifyWebHookSig(req *http.Request, webhookID string) bool {
 	return verifyResponse.Status == "SUCCESS"
 }
 
+func (c *Client) GetPaymentCapture(id string) ([]byte, error) {
+	req, err := http.NewRequest("GET", c.APIBase+"/v2/payments/captures/"+id, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	resp, err := c.SendWithAuth(req)
+	if err != nil {
+		return nil, err
+	}
+
+	defer resp.Body.Close()
+	return ioutil.ReadAll(resp.Body)
+}
+
 func (c *Client) GetCheckoutOrder(id string) ([]byte, error) {
 	req, err := http.NewRequest("GET", c.APIBase+"/v2/checkout/orders/"+id, nil)
 	if err != nil {
@@ -184,4 +200,16 @@ func (c *Client) IssueRefund(id string, email string) ([]byte, error) {
 
 	defer resp.Body.Close()
 	return ioutil.ReadAll(resp.Body)
+}
+
+func (c *Client) CaptureOrder(id string) (*http.Response, error) {
+	req, err := http.NewRequest("POST", c.APIBase+"/v2/checkout/orders/"+id+"/capture", nil)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Set("PayPal-Mock-Response", `{"mock_application_codes": "INSTRUMENT_DECLINED"}`)
+	req.Header.Set("Prefer", "return=representation")
+	req.Header.Set("Content-Type", "application/json")
+	return c.SendWithAuth(req)
 }

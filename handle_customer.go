@@ -7,15 +7,13 @@ import (
 	"net/http"
 	"net/url"
 	"os"
-	"regexp"
-	"strconv"
 	"strings"
 	"text/template"
-	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/jinzhu/gorm"
 	"github.com/zeroshade/tmsapi/internal"
+	"github.com/zeroshade/tmsapi/types"
 
 	"github.com/sendgrid/rest"
 	"github.com/sendgrid/sendgrid-go"
@@ -70,7 +68,7 @@ func (t *twilio) send(to, body string) error {
 	return nil
 }
 
-func sendNotifyEmail(apiKey string, conf *MerchantConfig, order *CheckoutOrder) error {
+func sendNotifyEmail(apiKey string, conf *MerchantConfig, order *types.CheckoutOrder) error {
 	const tmpl = `
 	Tickets Purchased By: {{ .Payer.Name.GivenName }} {{ .Payer.Name.Surname }} <a href='mailto:{{ .Payer.Email }}'>{{ .Payer.Email }}</a>
 	<br /><br />
@@ -104,10 +102,10 @@ func sendNotifyEmail(apiKey string, conf *MerchantConfig, order *CheckoutOrder) 
 	return nil
 }
 
-func SendClientMail(apiKey, host, email string, order *CheckoutOrder, conf *MerchantConfig) (*rest.Response, error) {
+func SendClientMail(apiKey, host, email string, order *types.CheckoutOrder, conf *MerchantConfig) (*rest.Response, error) {
 	type TmplData struct {
 		Host          string
-		PurchaseUnits []PurchaseUnit
+		PurchaseUnits []types.PurchaseUnit
 		MerchantID    string
 		CheckoutID    string
 	}
@@ -177,7 +175,7 @@ func SendText(db *gorm.DB) gin.HandlerFunc {
 			return
 		}
 
-		var order CheckoutOrder
+		var order types.CheckoutOrder
 		if err := json.Unmarshal(data, &order); err != nil {
 			c.JSON(http.StatusFailedDependency, gin.H{"error": err.Error()})
 			return
@@ -223,7 +221,7 @@ func Resend(db *gorm.DB) gin.HandlerFunc {
 			return
 		}
 
-		var order CheckoutOrder
+		var order types.CheckoutOrder
 		if err := json.Unmarshal(data, &order); err != nil {
 			c.JSON(http.StatusFailedDependency, gin.H{"error": err.Error()})
 			return
@@ -273,7 +271,7 @@ func ConfirmAndSend(db *gorm.DB) gin.HandlerFunc {
 			return
 		}
 
-		var order CheckoutOrder
+		var order types.CheckoutOrder
 		if err := json.Unmarshal(data, &order); err != nil {
 			c.JSON(http.StatusFailedDependency, gin.H{"error": err.Error()})
 			return
@@ -281,20 +279,20 @@ func ConfirmAndSend(db *gorm.DB) gin.HandlerFunc {
 
 		db.Save(&order)
 
-		re := regexp.MustCompile(`(\d+)[A-Z]+(\d{10})`)
+		// re := regexp.MustCompile(`(\d+)[A-Z]+(\d{10})`)
 
-		for _, pu := range order.PurchaseUnits {
-			for _, item := range pu.Items {
-				res := re.FindStringSubmatch(item.Sku)
-				pid, _ := strconv.Atoi(res[1])
-				timestamp, _ := strconv.ParseInt(res[2], 10, 64)
+		// for _, pu := range order.PurchaseUnits {
+		// 	for _, item := range pu.Items {
+		// 		res := re.FindStringSubmatch(item.Sku)
+		// 		pid, _ := strconv.Atoi(res[1])
+		// 		timestamp, _ := strconv.ParseInt(res[2], 10, 64)
 
-				tm := time.Unix(timestamp, 0).In(timeloc)
+		// 		tm := time.Unix(timestamp, 0).In(timeloc)
 
-				db.Model(ManualOverride{}).Where("product_id = ? AND time = ?", pid, tm).
-					UpdateColumn("avail", gorm.Expr("avail - ?", item.Quantity))
-			}
-		}
+		// 		db.Model(ManualOverride{}).Where("product_id = ? AND time = ?", pid, tm).
+		// 			UpdateColumn("avail", gorm.Expr("avail - ?", item.Quantity))
+		// 	}
+		// }
 
 		db.Model(order.Payer).Update(*order.Payer)
 
