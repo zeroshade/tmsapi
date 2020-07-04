@@ -249,6 +249,25 @@ func (a *Auth0Client) AssignRoles(userid string, roles ...string) {
 	}
 }
 
+func (a *Auth0Client) ResetPassword(userid string, passwd string) {
+	type reqBody struct {
+		Passwd string `json:"password"`
+	}
+
+	r := &reqBody{}
+	r.Passwd = passwd
+
+	u, _ := url.Parse(Audience)
+	u.Path += "users/" + userid
+
+	body, _ := json.Marshal(r)
+	req, _ := http.NewRequest("PATCH", u.String(), bytes.NewReader(body))
+	req.Header.Add("Content-Type", "application/json")
+
+	resp, _ := a.client.Do(req)
+	log.Println(resp.Status)
+}
+
 func (a *Auth0Client) DeleteUser(userid string) {
 	req, _ := http.NewRequest("DELETE", Audience+"users/"+userid, nil)
 	resp, _ := a.client.Do(req)

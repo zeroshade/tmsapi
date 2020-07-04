@@ -21,6 +21,24 @@ func addUserRoutes(router *gin.RouterGroup, db *gorm.DB) {
 	router.GET("/users", checkJWT(), getUsers())
 	router.POST("/user", checkJWT(), createUser())
 	router.DELETE("/user/:userid", checkJWT(), deleteUser())
+	router.POST("/user/:userid/passwd", checkJWT(), resetPass())
+}
+
+func resetPass() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		type resetReq struct {
+			NewPass string `json:"newpass"`
+		}
+
+		var r resetReq
+		if err := c.ShouldBindJSON(&r); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+
+		auth0Client.ResetPassword(c.Param("userid"), r.NewPass)
+		c.Status(http.StatusOK)
+	}
 }
 
 func getUsers() gin.HandlerFunc {
