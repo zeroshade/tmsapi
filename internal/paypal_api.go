@@ -208,7 +208,7 @@ func (c *Client) CaptureOrder(id string) (*http.Response, error) {
 		return nil, err
 	}
 
-	req.Header.Set("PayPal-Mock-Response", `{"mock_application_codes": "INSTRUMENT_DECLINED"}`)
+	// req.Header.Set("PayPal-Mock-Response", `{"mock_application_codes": "INSTRUMENT_DECLINED"}`)
 	req.Header.Set("Prefer", "return=representation")
 	req.Header.Set("Content-Type", "application/json")
 	return c.SendWithAuth(req)

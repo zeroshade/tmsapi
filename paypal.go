@@ -79,46 +79,6 @@ func HandlePaypalWebhook(db *gorm.DB) gin.HandlerFunc {
 			db.Model(&types.Capture{}).Where("id = ?", val.ID).Count(&count)
 			if count <= 0 {
 				db.Create(we.Resource)
-
-				if val.CheckoutID == "" {
-					for _, l := range val.Links {
-						if l.Rel != "up" {
-							continue
-						}
-
-						req, _ := http.NewRequest(l.Method, l.Href, nil)
-						resp, err := paypalClient.SendWithAuth(req)
-						if err != nil {
-							log.Println(err)
-							c.Status(http.StatusFailedDependency)
-							return
-						}
-
-						dec := json.NewDecoder(resp.Body)
-						var checkout types.CheckoutOrder
-						if err = dec.Decode(&checkout); err != nil {
-							log.Println(err)
-							c.Status(http.StatusFailedDependency)
-							return
-						}
-
-						db.Save(&checkout)
-						val.CheckoutID = checkout.ID
-						db.Save(&val)
-
-						var conf MerchantConfig
-						mid := checkout.PurchaseUnits[0].Payee.MerchantID
-						db.Find(&conf, "id = ?", mid)
-						if len(conf.ID) <= 0 {
-							db.Table("sandbox_infos").Select("id").Where("? = ANY (sandbox_ids)", mid).Scan(&conf)
-							db.Find(&conf)
-						}
-
-						apiKey := os.Getenv("SENDGRID_API_KEY")
-						sendNotifyEmail(apiKey, &conf, &checkout)
-					}
-				}
-
 				c.Status(http.StatusOK)
 			}
 			return

@@ -198,24 +198,27 @@ type PurchaseUnit struct {
 	} `json:"payments" gorm:"embedded"`
 }
 
-func (pu *PurchaseUnit) AfterSave(tx *gorm.DB) error {
-	for idx := range pu.Payments.Captures {
-		pu.Payments.Captures[idx].CheckoutID = pu.CheckoutID
-		tx.Save(&pu.Payments.Captures[idx])
-	}
-
+func (pu *PurchaseUnit) AfterCreate(tx *gorm.DB) error {
 	re := regexp.MustCompile(`(\d+)[A-Z]+(\d{10})`)
 
-	for _, item := range pu.Items {
+	for idx, item := range pu.Items {
+		pu.Items[idx].CheckoutID = pu.CheckoutID
+		tx.Create(&pu.Items[idx])
+
 		res := re.FindStringSubmatch(item.Sku)
 		pid, _ := strconv.Atoi(res[1])
 		timestamp, _ := strconv.ParseInt(res[2], 10, 64)
 
 		tm := time.Unix(timestamp, 0).In(loc)
-
 		tx.Table("manual_overrides").Where("product_id = ? AND time = ?", pid, tm).
 			UpdateColumn("avail", gorm.Expr("avail - ?", item.Quantity))
 	}
+
+	for idx := range pu.Payments.Captures {
+		pu.Payments.Captures[idx].CheckoutID = pu.CheckoutID
+		tx.Create(&pu.Payments.Captures[idx])
+	}
+
 	return nil
 }
 
@@ -252,11 +255,7 @@ type CheckoutOrder struct {
 func (c *CheckoutOrder) AfterCreate(tx *gorm.DB) error {
 	for p := range c.PurchaseUnits {
 		c.PurchaseUnits[p].CheckoutID = c.ID
-		for idx := range c.PurchaseUnits[p].Items {
-			c.PurchaseUnits[p].Items[idx].CheckoutID = c.ID
-			tx.Save(&c.PurchaseUnits[p].Items[idx])
-		}
-		tx.Save(&c.PurchaseUnits[p])
+		tx.Create(&c.PurchaseUnits[p])
 	}
 	return nil
 }
