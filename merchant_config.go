@@ -10,7 +10,7 @@ import (
 
 func addMerchantConfigRoutes(router *gin.RouterGroup, db *gorm.DB) {
 	router.GET("/config", GetMerchantConfig(db))
-	router.PUT("/config", checkJWT(), UpdateMerchantConfig(db))
+	router.PUT("/config", checkJWT(), logActionMiddle(db), UpdateMerchantConfig(db))
 }
 
 type SandboxInfo struct {

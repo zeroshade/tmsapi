@@ -1,7 +1,9 @@
 package main
 
 import (
+	"bytes"
 	"context"
+	"io/ioutil"
 	"log"
 	"net/http"
 	"os"
@@ -14,6 +16,7 @@ import (
 	"github.com/zeroshade/tmsapi/types"
 
 	"github.com/jinzhu/gorm"
+	"github.com/jinzhu/gorm/dialects/postgres"
 	_ "github.com/jinzhu/gorm/dialects/postgres"
 )
 
@@ -24,6 +27,31 @@ func init() {
 	loc, err = time.LoadLocation("America/New_York")
 	if err != nil {
 		panic(err)
+	}
+}
+
+func logActionMiddle(db *gorm.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		userid, ok := c.Get("user_id")
+		if !ok {
+			return
+		}
+
+		var data []byte
+		if c.Request.Body != nil {
+			data, _ = ioutil.ReadAll(c.Request.Body)
+			c.Request.Body = ioutil.NopCloser(bytes.NewBuffer(data))
+		}
+
+		l := types.LogAction{
+			MerchantID: c.Param("merchantid"),
+			UserID:     userid.(string),
+			Url:        c.Request.URL.Path,
+			Method:     c.Request.Method,
+			Payload:    postgres.Jsonb{data},
+		}
+
+		db.Create(&l)
 	}
 }
 
@@ -41,7 +69,7 @@ func main() {
 	db.AutoMigrate(&Product{}, &types.Schedule{}, &types.ScheduleTime{}, &TicketCategory{}, &Report{},
 		&types.Transaction{}, &types.Payment{}, &types.Sale{}, &types.PayerInfo{}, &types.WebHookEvent{}, &types.Item{}, &SandboxInfo{},
 		&types.CheckoutOrder{}, &types.Payer{}, &types.PurchaseItem{}, &types.PurchaseUnit{}, &types.Capture{}, &MerchantConfig{},
-		&ManualOverride{}, &types.Refund{}, &Boat{})
+		&ManualOverride{}, &types.Refund{}, &Boat{}, &types.LogAction{})
 	db.Model(&types.Schedule{}).Association("TimeArray")
 	db.Model(&types.Schedule{}).Association("NotAvail")
 	db.Model(&types.Payment{}).Association("Payer.PayerInfo")

@@ -17,7 +17,7 @@ func init() {
 
 func addScheduleRoutes(router *gin.RouterGroup, db *gorm.DB) {
 	router.GET("/schedule/:from/:to", GetSoldTickets(db))
-	router.PUT("/override", checkJWT(), saveOverride(db))
+	router.PUT("/override", checkJWT(), logActionMiddle(db), saveOverride(db))
 	router.GET("/override/:date", checkJWT(), getOverrides(db))
 	router.GET("/overrides/:from/:to", getOverrideRange(db))
 }

@@ -11,12 +11,12 @@ import (
 
 func addProductRoutes(router *gin.RouterGroup, db *gorm.DB) {
 	router.GET("/", GetProducts(db))
-	router.PUT("/product", checkJWT(), SaveProduct(db))
-	router.DELETE("/product/:prodid", checkJWT(), DeleteProduct(db))
+	router.PUT("/product", checkJWT(), logActionMiddle(db), SaveProduct(db))
+	router.DELETE("/product/:prodid", checkJWT(), logActionMiddle(db), DeleteProduct(db))
 	router.GET("/boats", getBoats(db))
-	router.PUT("/boats", checkJWT(), modifyBoat(db))
-	router.POST("/boats", checkJWT(), createBoat(db))
-	router.DELETE("/boats", checkJWT(), deleteBoat(db))
+	router.PUT("/boats", checkJWT(), logActionMiddle(db), modifyBoat(db))
+	router.POST("/boats", checkJWT(), logActionMiddle(db), createBoat(db))
+	router.DELETE("/boats", checkJWT(), logActionMiddle(db), deleteBoat(db))
 }
 
 type Boat struct {

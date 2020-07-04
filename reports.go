@@ -10,7 +10,7 @@ import (
 
 func addReportRoutes(router *gin.RouterGroup, db *gorm.DB) {
 	router.GET("/reports", GetReports(db))
-	router.PUT("/reports", checkJWT(), SaveReport(db))
+	router.PUT("/reports", checkJWT(), logActionMiddle(db), SaveReport(db))
 	router.DELETE("/reports/:id", checkJWT(), DeleteReport(db))
 }
 

@@ -12,11 +12,11 @@ import (
 )
 
 func addTicketRoutes(router *gin.RouterGroup, db *gorm.DB) {
-	router.PUT("/tickets", checkJWT(), SaveTicketCats(db))
+	router.PUT("/tickets", checkJWT(), logActionMiddle(db), SaveTicketCats(db))
 	router.GET("/tickets", GetTicketCats(db))
 	router.GET("/items/:date", checkJWT(), GetPurchases(db))
-	router.POST("/items", checkJWT(), GetOrders(db))
-	router.DELETE("/tickets/:id", checkJWT(), DeleteTicketsCat(db))
+	router.POST("/items", checkJWT(), logActionMiddle(db), GetOrders(db))
+	router.DELETE("/tickets/:id", checkJWT(), logActionMiddle(db), DeleteTicketsCat(db))
 	router.GET("/orders/:timestamp", checkJWT(), OrdersTimestamp(db))
 	router.GET("/orders", GetCheckouts(db))
 	router.POST("/passes", GetPasses(db))

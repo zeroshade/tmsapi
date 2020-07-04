@@ -19,9 +19,9 @@ func init() {
 
 func addUserRoutes(router *gin.RouterGroup, db *gorm.DB) {
 	router.GET("/users", checkJWT(), getUsers())
-	router.POST("/user", checkJWT(), createUser())
-	router.DELETE("/user/:userid", checkJWT(), deleteUser())
-	router.POST("/user/:userid/passwd", checkJWT(), resetPass())
+	router.POST("/user", checkJWT(), logActionMiddle(db), createUser())
+	router.DELETE("/user/:userid", checkJWT(), logActionMiddle(db), deleteUser())
+	router.POST("/user/:userid/passwd", checkJWT(), logActionMiddle(db), resetPass())
 }
 
 func resetPass() gin.HandlerFunc {
