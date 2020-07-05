@@ -55,6 +55,15 @@ func logActionMiddle(db *gorm.DB) gin.HandlerFunc {
 	}
 }
 
+func getLogActions(db *gorm.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		var logs []types.LogAction
+		db.Order("created_at DESC").Find(&logs, "merchant_id = ?", c.Param("merchantid"))
+
+		c.JSON(http.StatusOK, logs)
+	}
+}
+
 func main() {
 	URI := os.Getenv("DATABASE_URL")
 	if URI == "" {
@@ -108,6 +117,7 @@ func main() {
 	addUserRoutes(merchant, db)
 	addMerchantConfigRoutes(merchant, db)
 	merchant.GET("/passes/:checkoutid", GetBoardingPasses(db))
+	merchant.GET("/logactions", checkJWT(), getLogActions(db))
 
 	router.POST("/paypal", HandlePaypalWebhook(db))
 	router.POST("/confirmed", ConfirmAndSend(db))

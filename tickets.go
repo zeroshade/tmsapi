@@ -14,6 +14,7 @@ import (
 func addTicketRoutes(router *gin.RouterGroup, db *gorm.DB) {
 	router.PUT("/tickets", checkJWT(), logActionMiddle(db), SaveTicketCats(db))
 	router.GET("/tickets", GetTicketCats(db))
+	router.GET("/tickets/:id", checkJWT(), GetTicketCatEvenDeleted(db))
 	router.GET("/items/:date", checkJWT(), GetPurchases(db))
 	router.POST("/items", checkJWT(), logActionMiddle(db), GetOrders(db))
 	router.DELETE("/tickets/:id", checkJWT(), logActionMiddle(db), DeleteTicketsCat(db))
@@ -25,6 +26,9 @@ func addTicketRoutes(router *gin.RouterGroup, db *gorm.DB) {
 // TicketCategory holds the name of a price type and the mapping of
 // categories to prices for that price structure
 type TicketCategory struct {
+	CreatedAt  time.Time       `json:"-"`
+	UpdatedAt  time.Time       `json:"-"`
+	DeletedAt  *time.Time      `json:"-"`
 	ID         uint            `json:"id" gorm:"primary_key"`
 	MerchantID string          `json:"-" gorm:"index:ticket_merchant"`
 	Name       string          `json:"name"`
@@ -37,6 +41,14 @@ func GetTicketCats(db *gorm.DB) gin.HandlerFunc {
 		var cats []TicketCategory
 		db.Find(&cats, "merchant_id = ?", c.Param("merchantid"))
 		c.JSON(http.StatusOK, cats)
+	}
+}
+
+func GetTicketCatEvenDeleted(db *gorm.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		var cat TicketCategory
+		db.Unscoped().Where("id = ?", c.Param("id")).Find(&cat)
+		c.JSON(http.StatusOK, cat)
 	}
 }
 

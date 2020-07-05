@@ -7,9 +7,9 @@ import (
 
 type LogAction struct {
 	gorm.Model
-	MerchantID string `gorm:"index"`
-	UserID     string
-	Method     string
-	Url        string
-	Payload    postgres.Jsonb
+	MerchantID string         `gorm:"index" json:"-"`
+	UserID     string         `json:"userId"`
+	Method     string         `json:"method"`
+	Url        string         `json:"path"`
+	Payload    postgres.Jsonb `json:"message"`
 }

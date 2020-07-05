@@ -11,6 +11,7 @@ import (
 
 func addProductRoutes(router *gin.RouterGroup, db *gorm.DB) {
 	router.GET("/", GetProducts(db))
+	router.GET("/product/:prodid", checkJWT(), GetProdEvenDeleted(db))
 	router.PUT("/product", checkJWT(), logActionMiddle(db), SaveProduct(db))
 	router.DELETE("/product/:prodid", checkJWT(), logActionMiddle(db), DeleteProduct(db))
 	router.GET("/boats", getBoats(db))
@@ -107,6 +108,14 @@ func SaveProduct(db *gorm.DB) gin.HandlerFunc {
 
 		inprod.MerchantID = c.Param("merchantid")
 		db.Save(&inprod)
+	}
+}
+
+func GetProdEvenDeleted(db *gorm.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		var prod Product
+		db.Unscoped().Where("id = ?", c.Param("prodid")).Find(&prod)
+		c.JSON(http.StatusOK, prod)
 	}
 }
 
