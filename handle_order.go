@@ -92,7 +92,7 @@ func CaptureOrder(db *gorm.DB) gin.HandlerFunc {
 
 			order := AddOrderToDB(&r, db)
 
-			var conf MerchantConfig
+			var conf types.MerchantConfig
 			mid := order.PurchaseUnits[0].Payee.MerchantID
 			db.Find(&conf, "id = ?", mid)
 

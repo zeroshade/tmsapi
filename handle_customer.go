@@ -68,7 +68,7 @@ func (t *twilio) send(to, body string) error {
 	return nil
 }
 
-func sendNotifyEmail(apiKey string, conf *MerchantConfig, order *types.CheckoutOrder) error {
+func sendNotifyEmail(apiKey string, conf *types.MerchantConfig, order *types.CheckoutOrder) error {
 	const tmpl = `
 	Tickets Purchased By: {{ .Payer.Name.GivenName }} {{ .Payer.Name.Surname }} <a href='mailto:{{ .Payer.Email }}'>{{ .Payer.Email }}</a>
 	<br /><br />
@@ -102,7 +102,7 @@ func sendNotifyEmail(apiKey string, conf *MerchantConfig, order *types.CheckoutO
 	return nil
 }
 
-func SendClientMail(apiKey, host, email string, order *types.CheckoutOrder, conf *MerchantConfig) (*rest.Response, error) {
+func SendClientMail(apiKey, host, email string, order *types.CheckoutOrder, conf *types.MerchantConfig) (*rest.Response, error) {
 	type TmplData struct {
 		Host          string
 		PurchaseUnits []types.PurchaseUnit
@@ -181,7 +181,7 @@ func SendText(db *gorm.DB) gin.HandlerFunc {
 			return
 		}
 
-		var conf MerchantConfig
+		var conf types.MerchantConfig
 		mid := order.PurchaseUnits[0].Payee.MerchantID
 		db.Find(&conf, "id = ?", mid)
 
@@ -227,7 +227,7 @@ func Resend(db *gorm.DB) gin.HandlerFunc {
 			return
 		}
 
-		var conf MerchantConfig
+		var conf types.MerchantConfig
 		mid := order.PurchaseUnits[0].Payee.MerchantID
 		db.Find(&conf, "id = ?", mid)
 
@@ -296,7 +296,7 @@ func ConfirmAndSend(db *gorm.DB) gin.HandlerFunc {
 
 		db.Model(order.Payer).Update(*order.Payer)
 
-		var conf MerchantConfig
+		var conf types.MerchantConfig
 		mid := order.PurchaseUnits[0].Payee.MerchantID
 		db.Find(&conf, "id = ?", mid)
 

@@ -5,7 +5,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/jinzhu/gorm"
-	"github.com/lib/pq"
+	"github.com/zeroshade/tmsapi/types"
 )
 
 func addMerchantConfigRoutes(router *gin.RouterGroup, db *gorm.DB) {
@@ -13,28 +13,9 @@ func addMerchantConfigRoutes(router *gin.RouterGroup, db *gorm.DB) {
 	router.PUT("/config", checkJWT(), logActionMiddle(db), UpdateMerchantConfig(db))
 }
 
-type SandboxInfo struct {
-	ID         string         `gorm:"primary_key"`
-	SandboxIDs pq.StringArray `gorm:"type:text[]"`
-}
-
-type MerchantConfig struct {
-	ID              string `json:"-" gorm:"primary_key"`
-	PassTitle       string `json:"passTitle"`
-	NotifyNumber    string `json:"notifyNumber"`
-	EmailFrom       string `json:"emailFrom"`
-	EmailName       string `json:"emailName"`
-	EmailContent    string `json:"emailContent"`
-	SendSMS         bool   `json:"sendSMS" gorm:"default:false"`
-	TermsConds      string `json:"terms"`
-	SandboxID       string `json:"-"`
-	TwilioAcctSID   string `json:"-"`
-	TwilioAcctToken string `json:"-"`
-}
-
 func GetMerchantConfig(db *gorm.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		var conf MerchantConfig
+		var conf types.MerchantConfig
 		db.Find(&conf, "id = ?", c.Param("merchantid"))
 		c.JSON(http.StatusOK, conf)
 	}
@@ -42,7 +23,7 @@ func GetMerchantConfig(db *gorm.DB) gin.HandlerFunc {
 
 func UpdateMerchantConfig(db *gorm.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		var conf MerchantConfig
+		var conf types.MerchantConfig
 		if err := c.ShouldBindJSON(&conf); err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 			return

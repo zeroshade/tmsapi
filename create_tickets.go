@@ -115,7 +115,7 @@ func generatePdf(db *gorm.DB, items []types.PurchaseItem, passTitle, name string
 
 func GetBoardingPasses(db *gorm.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		var config MerchantConfig
+		var config types.MerchantConfig
 		db.Find(&config, "id = ?", c.Param("merchantid"))
 
 		var items []types.PurchaseItem

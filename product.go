@@ -21,15 +21,16 @@ func addProductRoutes(router *gin.RouterGroup, db *gorm.DB) {
 }
 
 type Boat struct {
-	ID    int    `json:"id" gorm:"primary key"`
-	Name  string `json:"name"`
-	Color string `json:"color"`
+	ID         int    `json:"id" gorm:"primary key;auto_increment;"`
+	Name       string `json:"name"`
+	Color      string `json:"color"`
+	MerchantID string `json:"-" gorm:"type:varchar;not null;primary_key;"`
 }
 
 func getBoats(db *gorm.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var boats []Boat
-		db.Find(&boats)
+		db.Find(&boats, "merchant_id = ?", c.Param("merchantid"))
 		c.JSON(http.StatusOK, boats)
 	}
 }
@@ -41,6 +42,7 @@ func modifyBoat(db *gorm.DB) gin.HandlerFunc {
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 			return
 		}
+		boat.MerchantID = c.Param("merchantid")
 
 		db.Save(&boat)
 		c.Status(http.StatusOK)
@@ -55,6 +57,7 @@ func createBoat(db *gorm.DB) gin.HandlerFunc {
 			return
 		}
 
+		boat.MerchantID = c.Param("merchantid")
 		db.Create(&boat)
 		c.Status(http.StatusOK)
 	}
@@ -68,6 +71,7 @@ func deleteBoat(db *gorm.DB) gin.HandlerFunc {
 			return
 		}
 
+		boat.MerchantID = c.Param("merchantid")
 		db.Delete(&boat)
 		c.Status(http.StatusOK)
 	}
@@ -122,7 +126,7 @@ func GetProdEvenDeleted(db *gorm.DB) gin.HandlerFunc {
 func GetProducts(db *gorm.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var prods []Product
-		db.Preload("Boat").Preload("Schedules").Preload("Schedules.TimeArray").Order("name asc").Find(&prods, "merchant_id = ?", c.Param("merchantid"))
+		db.Preload("Schedules").Preload("Schedules.TimeArray").Order("name asc").Find(&prods, "merchant_id = ?", c.Param("merchantid"))
 		c.JSON(http.StatusOK, prods)
 	}
 }

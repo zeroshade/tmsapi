@@ -17,10 +17,8 @@ require (
 	github.com/sendgrid/sendgrid-go v3.5.0+incompatible
 	github.com/sfreiberg/gotwilio v0.0.0-20191120211240-38187998ae52
 	github.com/skip2/go-qrcode v0.0.0-20191027152451-9434209cb086
-	github.com/stretchr/testify v1.4.0 // indirect
+	github.com/stripe/stripe-go/v71 v71.48.0
 	golang.org/x/crypto v0.0.0-20191206172530-e9b2fee46413 // indirect
-	golang.org/x/net v0.0.0-20191209160850-c0dbc17a3553 // indirect
-	golang.org/x/sys v0.0.0-20191210023423-ac6580df4449 // indirect
 	google.golang.org/appengine v1.6.5 // indirect
 	gopkg.in/check.v1 v1.0.0-20190902080502-41f04d3bba15 // indirect
 	gopkg.in/yaml.v2 v2.2.7 // indirect

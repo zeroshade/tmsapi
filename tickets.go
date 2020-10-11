@@ -7,7 +7,8 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/jinzhu/gorm"
 	"github.com/jinzhu/gorm/dialects/postgres"
-	"github.com/lib/pq"
+	"github.com/zeroshade/tmsapi/paypal"
+	"github.com/zeroshade/tmsapi/stripe"
 	"github.com/zeroshade/tmsapi/types"
 )
 
@@ -109,38 +110,30 @@ func TripTime(d string) func(db *gorm.DB) *gorm.DB {
 	}
 }
 
+type PaymentHandler interface {
+	OrdersTimestamp(config *types.MerchantConfig, db *gorm.DB, timestamp string) (interface{}, error)
+	GetSoldTickets(config *types.MerchantConfig, db *gorm.DB, from, to string) (interface{}, error)
+}
+
 func OrdersTimestamp(db *gorm.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		type Ret struct {
-			Name        string `json:"name"`
-			Description string `json:"desc"`
-			Value       string `json:"value"`
-			Payer       string `json:"payer"`
-			PayerID     string `json:"payerId"`
-			Email       string `json:"email"`
-			PhoneNumber string `json:"phone"`
-			Quantity    uint   `json:"qty"`
-			Coid        string `json:"coid"`
-			Sku         string `json:"sku"`
-			Status      string `json:"status"`
+		var config types.MerchantConfig
+		db.Find(&config, "id = ?", c.Param("merchantid"))
+
+		var handler PaymentHandler
+		switch config.PaymentType {
+		case "paypal":
+			handler = &paypal.Handler{}
+		case "stripe":
+			handler = &stripe.Handler{}
 		}
 
-		var sids pq.StringArray
-		row := db.Table("sandbox_infos").Select("sandbox_ids").Where("id = ?", c.Param("merchantid")).Row()
-		row.Scan(&sids)
-
-		var ret []Ret
-		db.Table("purchase_items as pi").
-			Joins("LEFT JOIN purchase_units as pu USING(checkout_id)").
-			Joins("LEFT JOIN checkout_orders as co ON pi.checkout_id = co.id").
-			Joins("LEFT JOIN captures as cap USING(checkout_id)").
-			Joins("LEFT JOIN payers as pa ON co.payer_id = pa.id").
-			Where("(pu.payee_merchant_id = ? OR pu.payee_merchant_id = ANY (?)) AND SUBSTRING(sku FROM '\\d+[A-Z]+(\\d{10})\\d*') = ?",
-				c.Param("merchantid"), sids, c.Param("timestamp")).
-			Select("pi.name, co.payer_id, pi.checkout_id as coid, sku, pi.description, pi.value, given_name || ' ' || surname as payer, email, phone_number, quantity, cap.status").
-			Scan(&ret)
-
-		c.JSON(http.StatusOK, ret)
+		ret, err := handler.OrdersTimestamp(&config, db, c.Param("timestamp"))
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		} else {
+			c.JSON(http.StatusOK, ret)
+		}
 	}
 }
 

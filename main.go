@@ -13,6 +13,7 @@ import (
 
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
+	"github.com/zeroshade/tmsapi/stripe"
 	"github.com/zeroshade/tmsapi/types"
 
 	"github.com/jinzhu/gorm"
@@ -64,6 +65,16 @@ func getLogActions(db *gorm.DB) gin.HandlerFunc {
 	}
 }
 
+func getStripeAcct(db *gorm.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		var conf types.MerchantConfig
+		db.Find(&conf, "id = ?", c.Param("merchantid"))
+
+		c.Set("stripe_acct", conf.StripeKey)
+		c.Next()
+	}
+}
+
 func main() {
 	URI := os.Getenv("DATABASE_URL")
 	if URI == "" {
@@ -76,9 +87,9 @@ func main() {
 	}
 	defer db.Close()
 	db.AutoMigrate(&Product{}, &types.Schedule{}, &types.ScheduleTime{}, &TicketCategory{}, &Report{},
-		&types.Transaction{}, &types.Payment{}, &types.Sale{}, &types.PayerInfo{}, &types.WebHookEvent{}, &types.Item{}, &SandboxInfo{},
-		&types.CheckoutOrder{}, &types.Payer{}, &types.PurchaseItem{}, &types.PurchaseUnit{}, &types.Capture{}, &MerchantConfig{},
-		&ManualOverride{}, &types.Refund{}, &Boat{}, &types.LogAction{})
+		&types.Transaction{}, &types.Payment{}, &types.Sale{}, &types.PayerInfo{}, &types.WebHookEvent{}, &types.Item{}, &types.SandboxInfo{},
+		&types.CheckoutOrder{}, &types.Payer{}, &types.PurchaseItem{}, &types.PurchaseUnit{}, &types.Capture{}, &types.MerchantConfig{},
+		&ManualOverride{}, &types.Refund{}, &Boat{}, &types.LogAction{}, &stripe.PaymentIntent{}, &stripe.LineItem{})
 	db.Model(&types.Schedule{}).Association("TimeArray")
 	db.Model(&types.Schedule{}).Association("NotAvail")
 	db.Model(&types.Payment{}).Association("Payer.PayerInfo")
@@ -101,7 +112,7 @@ func main() {
 	}
 
 	config := cors.DefaultConfig()
-	config.AllowHeaders = append(config.AllowHeaders, "Authorization")
+	config.AllowHeaders = append(config.AllowHeaders, "Authorization", "x-calendar-origin")
 	config.AllowOrigins = []string{"*"}
 
 	router := gin.New()
@@ -116,9 +127,11 @@ func main() {
 	addProductRoutes(merchant, db)
 	addUserRoutes(merchant, db)
 	addMerchantConfigRoutes(merchant, db)
+	stripe.AddStripeRoutes(merchant, getStripeAcct(db), db)
 	merchant.GET("/passes/:checkoutid", GetBoardingPasses(db))
 	merchant.GET("/logactions", checkJWT(), getLogActions(db))
 
+	router.POST("/stripehook", stripe.StripeWebhook(db))
 	router.POST("/paypal", HandlePaypalWebhook(db))
 	router.POST("/confirmed", ConfirmAndSend(db))
 	router.POST("/sendmail", Resend(db))
