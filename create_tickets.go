@@ -13,6 +13,8 @@ import (
 	"github.com/jinzhu/gorm"
 	"github.com/jung-kurt/gofpdf"
 	"github.com/skip2/go-qrcode"
+	"github.com/zeroshade/tmsapi/paypal"
+	"github.com/zeroshade/tmsapi/stripe"
 	"github.com/zeroshade/tmsapi/types"
 )
 
@@ -22,7 +24,7 @@ const spaceBetween = 15
 
 var skuRe = regexp.MustCompile(`(\d+)([A-Z]+)(\d{10})\d*`)
 
-func drawPass(f *gofpdf.Fpdf, item *types.PurchaseItem, passTitle string, boat *Boat, name, tkt, qrname string) {
+func drawPass(f *gofpdf.Fpdf, item types.PassItem, passTitle string, boat *Boat, name, tkt, qrname string) {
 	var opt gofpdf.ImageOptions
 	opt.ImageType = "png"
 
@@ -67,7 +69,7 @@ func drawPass(f *gofpdf.Fpdf, item *types.PurchaseItem, passTitle string, boat *
 	f.SetX(left)
 	f.Cell(40, 7, "Trip:")
 	f.SetFont("Courier", "", 14)
-	f.Cell(100, 7, item.Description)
+	f.Cell(100, 7, item.GetDesc())
 
 	f.Ln(15)
 	f.SetX(left)
@@ -85,7 +87,7 @@ func drawPass(f *gofpdf.Fpdf, item *types.PurchaseItem, passTitle string, boat *
 	f.SetXY(0, starty+passHeight+spaceBetween)
 }
 
-func generatePdf(db *gorm.DB, items []types.PurchaseItem, passTitle, name string, w io.Writer) {
+func generatePdf(db *gorm.DB, items []types.PassItem, passTitle, name string, w io.Writer) {
 	var opt gofpdf.ImageOptions
 	opt.ImageType = "png"
 
@@ -93,21 +95,24 @@ func generatePdf(db *gorm.DB, items []types.PurchaseItem, passTitle, name string
 	pdf.SetTitle("Boarding Passes", false)
 
 	for _, i := range items {
-		skuPieces := skuRe.FindAllStringSubmatch(i.Sku, -1)
+		skuPieces := skuRe.FindAllStringSubmatch(i.GetSku(), -1)
 
 		pid := skuPieces[0][1]
 
 		var prod Product
-		db.Preload("Boat").Find(&prod, "id = ?", pid)
+		db.Find(&prod, "id = ?", pid)
+		var boat Boat
+		db.Find(&boat, "id = ?", prod.BoatID)
 
+		prod.Boat = &boat
 		tkt := strings.Title(strings.ToLower(skuPieces[0][2]))
 
 		pdf.AddPage()
-		for n := uint(1); n <= i.Quantity; n++ {
-			qrname := fmt.Sprintf("%s-%s-%d", i.CheckoutID, i.Sku, n)
+		for n := uint(1); n <= i.GetQuantity(); n++ {
+			qrname := fmt.Sprintf("%s-%s-%d", i.GetID(), i.GetSku(), n)
 			data, _ := qrcode.Encode(qrname, qrcode.High, 50)
 			pdf.RegisterImageOptionsReader(qrname, opt, bytes.NewReader(data))
-			drawPass(pdf, &i, passTitle, prod.Boat, name, tkt, qrname)
+			drawPass(pdf, i, passTitle, prod.Boat, name, tkt, qrname)
 		}
 	}
 	pdf.Output(w)
@@ -118,26 +123,19 @@ func GetBoardingPasses(db *gorm.DB) gin.HandlerFunc {
 		var config types.MerchantConfig
 		db.Find(&config, "id = ?", c.Param("merchantid"))
 
-		var items []types.PurchaseItem
-		var name string
-		var email string
-		var payerId string
+		var handler PaymentHandler
 
-		db.Where("checkout_id = ?", c.Param("checkoutid")).
-			Select([]string{"checkout_id", "sku", "name", "value", "quantity",
-				`COALESCE(NULLIF(description, ''), SUBSTRING(name from '\w* Ticket, [^,]*, (.*)')) as description`}).
-			Find(&items)
+		switch config.PaymentType {
+		case "stripe":
+			handler = &stripe.Handler{}
+		case "paypal":
+			handler = &paypal.Handler{}
+		}
 
-		db.Table("checkout_orders as co").
-			Joins("LEFT JOIN payers as p ON co.payer_id = p.id").
-			Where("co.id = ?", c.Param("checkoutid")).
-			Select("given_name || ' ' || surname as name, email, payer_id").
-			Row().Scan(&name, &email, &payerId)
-
-		// c.JSON(http.StatusOK, gin.H{"items": items, "name": name, "email": email, "payer": payerId})
-		c.Status(http.StatusOK)
+		items, name := handler.GetPassItems(&config, db, c.Param("checkoutid"))
 		c.Header("Content-Type", "application/pdf")
 		c.Header("Content-Disposition", `attachment; filename="boardingpasses_`+c.Param("checkoutid")+`.pdf"`)
+		c.Status(http.StatusOK)
 		generatePdf(db, items, config.PassTitle, name, c.Writer)
 	}
 }

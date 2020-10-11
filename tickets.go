@@ -113,6 +113,7 @@ func TripTime(d string) func(db *gorm.DB) *gorm.DB {
 type PaymentHandler interface {
 	OrdersTimestamp(config *types.MerchantConfig, db *gorm.DB, timestamp string) (interface{}, error)
 	GetSoldTickets(config *types.MerchantConfig, db *gorm.DB, from, to string) (interface{}, error)
+	GetPassItems(conf *types.MerchantConfig, db *gorm.DB, id string) ([]types.PassItem, string)
 }
 
 func OrdersTimestamp(db *gorm.DB) gin.HandlerFunc {

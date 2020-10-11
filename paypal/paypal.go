@@ -83,3 +83,27 @@ func (h Handler) GetSoldTickets(config *types.MerchantConfig, db *gorm.DB, from,
 
 	return out, nil
 }
+
+func (h Handler) GetPassItems(conf *types.MerchantConfig, db *gorm.DB, id string) ([]types.PassItem, string) {
+	var items []types.PurchaseItem
+	var name string
+	var email string
+	var payerId string
+
+	db.Where("checkout_id = ?", id).
+		Select([]string{"checkout_id", "sku", "name", "value", "quantity",
+			`COALESCE(NULLIF(description, ''), SUBSTRING(name from '\w* Ticket, [^,]*, (.*)')) as description`}).
+		Find(&items)
+
+	db.Table("checkout_orders as co").
+		Joins("LEFT JOIN payers as p ON co.payer_id = p.id").
+		Where("co.id = ?", id).
+		Select("given_name || ' ' || surname as name, email, payer_id").
+		Row().Scan(&name, &email, &payerId)
+
+	ret := make([]types.PassItem, len(items))
+	for idx, i := range items {
+		ret[idx] = &i
+	}
+	return ret, name
+}

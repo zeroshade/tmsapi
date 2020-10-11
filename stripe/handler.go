@@ -62,3 +62,44 @@ func (h Handler) GetSoldTickets(config *types.MerchantConfig, db *gorm.DB, from,
 
 	return out, nil
 }
+
+type passitem struct {
+	ID          string
+	PaymentID   string
+	Quantity    uint
+	Sku         string
+	Name        string
+	Description string
+	Amount      string `gorm:"type:money"`
+}
+
+func (p *passitem) GetName() string   { return p.Name }
+func (p *passitem) GetSku() string    { return p.Sku }
+func (p *passitem) GetDesc() string   { return p.Description }
+func (p *passitem) GetQuantity() uint { return p.Quantity }
+func (p *passitem) GetID() string     { return p.PaymentID }
+
+func (h Handler) GetPassItems(config *types.MerchantConfig, db *gorm.DB, id string) ([]types.PassItem, string) {
+	var items []passitem
+
+	db.Model(&LineItem{}).
+		Where("payment_id = ? AND sku != ''", id).
+		Select([]string{"payment_id", "id", "quantity", "sku", "name", "amount",
+			`SUBSTRING(name from '\w* Ticket, [^,]*, (.*)') as description`}).
+		Scan(&items)
+
+	var name string
+	var email string
+
+	db.Model(PaymentIntent{}).
+		Where("id = ?", id).
+		Select("name, email").
+		Row().Scan(&name, &email)
+
+	ret := make([]types.PassItem, len(items))
+	for idx, i := range items {
+		ret[idx] = &i
+	}
+
+	return ret, name
+}

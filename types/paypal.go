@@ -183,6 +183,12 @@ type PurchaseItem struct {
 	Description string `json:"description"`
 }
 
+func (p *PurchaseItem) GetName() string   { return p.Name }
+func (p *PurchaseItem) GetSku() string    { return p.Sku }
+func (p *PurchaseItem) GetDesc() string   { return p.Description }
+func (p *PurchaseItem) GetQuantity() uint { return p.Quantity }
+func (p *PurchaseItem) GetID() string     { return p.CheckoutID }
+
 type PurchaseUnit struct {
 	CheckoutID string    `json:"-" gorm:"primary_key"`
 	RefID      string    `json:"reference_id"`
