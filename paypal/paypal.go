@@ -102,8 +102,8 @@ func (h Handler) GetPassItems(conf *types.MerchantConfig, db *gorm.DB, id string
 		Row().Scan(&name, &email, &payerId)
 
 	ret := make([]types.PassItem, len(items))
-	for idx, i := range items {
-		ret[idx] = &i
+	for idx := range items {
+		ret[idx] = &items[idx]
 	}
 	return ret, name
 }
