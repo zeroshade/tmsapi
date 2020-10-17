@@ -167,6 +167,8 @@ func StripeWebhook(db *gorm.DB) gin.HandlerFunc {
 			return
 		}
 
+		fmt.Println(event.Type)
+
 		var conf types.MerchantConfig
 		db.Find(&conf, "stripe_key = ?", event.Account)
 
@@ -252,6 +254,14 @@ func StripeWebhook(db *gorm.DB) gin.HandlerFunc {
 					UnitPrice: fmt.Sprintf("%0.2f", float64(li.Price.UnitAmount)/100.0),
 				})
 			}
+		case "charge.refunded":
+			var charge stripe.Charge
+			if err := json.Unmarshal(event.Data.Raw, &charge); err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+				return
+			}
+
+			db.Model(&PaymentIntent{}).Where("id = ?", charge.PaymentIntent.ID).UpdateColumn("status", "refunded")
 		}
 
 		c.Status(http.StatusOK)
