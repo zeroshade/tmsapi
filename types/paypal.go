@@ -222,7 +222,13 @@ func (pu *PurchaseUnit) AfterCreate(tx *gorm.DB) error {
 
 	for idx := range pu.Payments.Captures {
 		pu.Payments.Captures[idx].CheckoutID = pu.CheckoutID
-		tx.Create(&pu.Payments.Captures[idx])
+		count := 0
+		tx.Model(&pu.Payments.Captures[idx]).Where("id = ?", pu.Payments.Captures[idx].ID).Count(&count)
+		if count == 0 {
+			tx.Create(&pu.Payments.Captures[idx])
+		} else {
+			tx.Save(&pu.Payments.Captures[idx])
+		}
 	}
 
 	return nil
