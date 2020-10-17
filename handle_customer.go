@@ -69,6 +69,7 @@ func (t *twilio) send(to, body string) error {
 }
 
 func sendNotifyEmail(apiKey string, conf *types.MerchantConfig, order *types.CheckoutOrder) error {
+	log.Println("Send Notify Mail:", order, conf)
 	const tmpl = `
 	Tickets Purchased By: {{ .Payer.Name.GivenName }} {{ .Payer.Name.Surname }} <a href='mailto:{{ .Payer.Email }}'>{{ .Payer.Email }}</a>
 	<br /><br />
@@ -103,6 +104,8 @@ func sendNotifyEmail(apiKey string, conf *types.MerchantConfig, order *types.Che
 }
 
 func SendClientMail(apiKey, host, email string, order *types.CheckoutOrder, conf *types.MerchantConfig) (*rest.Response, error) {
+	log.Println("Send Client Mail:", email, order, conf)
+
 	type TmplData struct {
 		Host          string
 		PurchaseUnits []types.PurchaseUnit
