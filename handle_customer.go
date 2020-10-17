@@ -69,7 +69,7 @@ func (t *twilio) send(to, body string) error {
 }
 
 func sendNotifyEmail(apiKey string, conf *types.MerchantConfig, order *types.CheckoutOrder) error {
-	log.Println("Send Notify Mail:", order, conf)
+	log.Println("Send Notify Mail:", order.ID, conf.EmailFrom)
 	const tmpl = `
 	Tickets Purchased By: {{ .Payer.Name.GivenName }} {{ .Payer.Name.Surname }} <a href='mailto:{{ .Payer.Email }}'>{{ .Payer.Email }}</a>
 	<br /><br />
@@ -104,8 +104,6 @@ func sendNotifyEmail(apiKey string, conf *types.MerchantConfig, order *types.Che
 }
 
 func SendClientMail(apiKey, host, email string, order *types.CheckoutOrder, conf *types.MerchantConfig) (*rest.Response, error) {
-	log.Println("Send Client Mail:", email, order, conf)
-
 	type TmplData struct {
 		Host          string
 		PurchaseUnits []types.PurchaseUnit
@@ -126,6 +124,8 @@ func SendClientMail(apiKey, host, email string, order *types.CheckoutOrder, conf
 	<br />
 	You can download your boarding passes here: <a href='https://{{.Host}}/info/{{.MerchantID}}/passes/{{.CheckoutID}}'>Click Here</a>
 	<br />`
+
+	log.Println("Send Client Mail:", conf.EmailFrom, email, order.ID)
 
 	from := mail.NewEmail(conf.EmailName, conf.EmailFrom)
 	subject := "Tickets Purchased"
