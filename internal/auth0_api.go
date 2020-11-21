@@ -7,7 +7,6 @@ import (
 	"log"
 	"net/http"
 	"net/url"
-	"os"
 	"strings"
 	"time"
 )
@@ -190,7 +189,7 @@ func (a *Auth0Client) GetUsers(query string) []*User {
 	return users
 }
 
-func (a *Auth0Client) CreateUser(u *User) {
+func (a *Auth0Client) CreateUser(u *User) (err error) {
 	u.Connection = "Username-Password-Authentication"
 	body, err := json.Marshal(*u)
 	if err != nil {
@@ -199,6 +198,14 @@ func (a *Auth0Client) CreateUser(u *User) {
 	}
 
 	resp, _ := a.client.Post(Audience+"users", "application/json", bytes.NewReader(body))
+	defer resp.Body.Close()
+	dec := json.NewDecoder(resp.Body)
+
+	type errMsg struct {
+		Code  int    `json:"statusCode"`
+		Error string `json:"error"`
+		Msg   string `json:"message"`
+	}
 
 	switch resp.StatusCode {
 	case http.StatusCreated:
@@ -214,15 +221,18 @@ func (a *Auth0Client) CreateUser(u *User) {
 	case http.StatusTooManyRequests:
 		fallthrough
 	default:
-		log.Println(resp.Status)
-		resp.Write(os.Stdout)
+		var e errMsg
+		if err := dec.Decode(&e); err != nil {
+			log.Println("Failed to decode Response:", err)
+		}
+
+		return fmt.Errorf("create_user: %s: %s", e.Error, e.Msg)
 	}
 
-	defer resp.Body.Close()
-	dec := json.NewDecoder(resp.Body)
 	if err := dec.Decode(u); err != nil {
 		log.Println("Failed to decode response: ", err)
 	}
+	return nil
 }
 
 func (a *Auth0Client) AssignRoles(userid string, roles ...string) {

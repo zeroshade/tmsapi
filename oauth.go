@@ -60,7 +60,11 @@ func createUser() gin.HandlerFunc {
 		}
 
 		u.AppMetadata["merchant_id"] = json.RawMessage([]byte(`"` + c.Param("merchantid") + `"`))
-		auth0Client.CreateUser(&u)
+		err := auth0Client.CreateUser(&u)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"err": err.Error()})
+			return
+		}
 
 		auth0Client.AssignRoles(u.UserID, "captain")
 	}
