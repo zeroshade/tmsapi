@@ -17,11 +17,11 @@ type twilio struct {
 	from  string
 }
 
-func NewTwilio(sid, token string) *twilio {
+func NewTwilio(sid, token, from string) *twilio {
 	return &twilio{
 		sid:   sid,
 		token: token,
-		from:  twilioMsgFrom,
+		from:  from,
 	}
 }
 

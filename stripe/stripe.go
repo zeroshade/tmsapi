@@ -334,7 +334,7 @@ func StripeWebhook(db *gorm.DB) gin.HandlerFunc {
 			}
 
 			if conf.SendSMS {
-				t := internal.NewTwilio(conf.TwilioAcctSID, conf.TwilioAcctToken)
+				t := internal.NewTwilio(conf.TwilioAcctSID, conf.TwilioAcctToken, conf.TwilioFromNumber)
 				t.Send(conf.NotifyNumber, "Tickets Purchased by "+pm.Charges.Data[0].BillingDetails.Name)
 			}
 
