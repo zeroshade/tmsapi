@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
-	"net/url"
 	"os"
 	"strings"
 	"text/template"
@@ -23,50 +22,6 @@ import (
 var twilioAccountSid = os.Getenv("TWILIO_ACCOUNT_SID")
 var twilioAuthToken = os.Getenv("TWILIO_AUTH_TOKEN")
 var twilioMsgingService = os.Getenv("TWILIO_MSGING_SERVICE")
-var twilioMsgFrom = os.Getenv("TWILIO_MSG_FROM")
-
-type twilio struct {
-	sid   string
-	token string
-	from  string
-}
-
-func NewTwilio(sid, token string) *twilio {
-	return &twilio{
-		sid:   sid,
-		token: token,
-		from:  twilioMsgFrom,
-	}
-}
-
-func (t *twilio) send(to, body string) error {
-	msgData := url.Values{}
-	msgData.Set("To", to)
-	msgData.Set("From", t.from)
-	msgData.Set("Body", body)
-
-	twilioApiUrl := "https://api.twilio.com/2010-04-01/Accounts/" + t.sid + "/Messages.json"
-
-	client := &http.Client{}
-	req, _ := http.NewRequest("POST", twilioApiUrl, strings.NewReader(msgData.Encode()))
-	req.SetBasicAuth(t.sid, t.token)
-	req.Header.Add("Accept", "application/json")
-	req.Header.Add("Content-Type", "application/x-www-form-urlencoded")
-
-	resp, _ := client.Do(req)
-	if resp.StatusCode >= 200 && resp.StatusCode < 300 {
-		var data map[string]interface{}
-		defer resp.Body.Close()
-		decoder := json.NewDecoder(resp.Body)
-		if err := decoder.Decode(&data); err != nil {
-			return err
-		}
-		log.Println("Twilio Notification set to: ", to, " sid: ", data["sid"])
-	} else {
-		log.Println("Twilio SMS: ", resp.Status)
-	}
-	return nil
-}
 
 func sendNotifyEmail(apiKey string, conf *types.MerchantConfig, order *types.CheckoutOrder) error {
 	log.Println("Send Notify Mail:", order.ID, conf.EmailFrom)
@@ -193,8 +148,8 @@ func SendText(db *gorm.DB) gin.HandlerFunc {
 			db.Find(&conf)
 		}
 
-		t := NewTwilio(conf.TwilioAcctSID, conf.TwilioAcctToken)
-		t.send(r.Phone, "Boarding Passes Link: https://"+c.Request.Host+"/info/"+order.PurchaseUnits[0].Payee.MerchantID+"/passes/"+order.ID)
+		t := internal.NewTwilio(conf.TwilioAcctSID, conf.TwilioAcctToken)
+		t.Send(r.Phone, "Boarding Passes Link: https://"+c.Request.Host+"/info/"+order.PurchaseUnits[0].Payee.MerchantID+"/passes/"+order.ID)
 	}
 }
 
@@ -317,8 +272,8 @@ func ConfirmAndSend(db *gorm.DB) gin.HandlerFunc {
 		sendNotifyEmail(apiKey, &conf, &order)
 
 		if conf.SendSMS {
-			t := NewTwilio(conf.TwilioAcctSID, conf.TwilioAcctToken)
-			t.send(conf.NotifyNumber, "Tickets Purchased by "+order.Payer.Name.GivenName+" "+order.Payer.Name.Surname)
+			t := internal.NewTwilio(conf.TwilioAcctSID, conf.TwilioAcctToken)
+			t.Send(conf.NotifyNumber, "Tickets Purchased by "+order.Payer.Name.GivenName+" "+order.Payer.Name.Surname)
 		}
 
 		c.Status(response.StatusCode)

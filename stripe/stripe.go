@@ -16,6 +16,8 @@ import (
 	"github.com/sendgrid/sendgrid-go/helpers/mail"
 	"github.com/stripe/stripe-go/v71"
 	"github.com/stripe/stripe-go/v71/checkout/session"
+	"github.com/stripe/stripe-go/v71/paymentintent"
+	"github.com/zeroshade/tmsapi/internal"
 	"github.com/zeroshade/tmsapi/types"
 )
 
@@ -146,6 +148,90 @@ type PaymentIntent struct {
 	Status    string    `json:"status"`
 }
 
+type notifyItem struct {
+	Name        string
+	Description string
+	Quantity    int
+}
+
+func sendNotifyEmail(apiKey string, conf *types.MerchantConfig, payment *stripe.PaymentIntent, itemList []notifyItem) error {
+	details := payment.Charges.Data[0].BillingDetails
+
+	log.Println("Send Notify Mail:", payment.ID, conf.EmailFrom)
+	const tmpl = `
+	Tickets Purchased By: {{ .Payer }} <a href='mailto:{{ .PayerEmail }}'>{{ .PayerEmail }}</a>
+	<br /><br />
+	<ul>
+	{{ range .Items -}}
+	<li>{{ .Quantity }} {{ .Name }} {{ .Description }}</li>
+	</ul>
+	{{- end }}`
+
+	t := template.Must(template.New("notify").Parse(tmpl))
+
+	from := mail.NewEmail("Do Not Reply", "donotreply@websbyjoe.org")
+	to := mail.NewEmail(conf.EmailName, conf.EmailFrom)
+	subject := "Tickets Purchased"
+	var tpl bytes.Buffer
+
+	if err := t.Execute(&tpl, gin.H{
+		"Payer":      details.Name,
+		"PayerEmail": details.Email,
+		"Items":      itemList}); err != nil {
+		return err
+	}
+
+	content := mail.NewContent("text/html", tpl.String())
+	log.Println("Send Email:", from, subject, to, content)
+	m := mail.NewV3MailInit(from, subject, to, content)
+	request := sendgrid.GetRequest(apiKey, "/v3/mail/send", "https://api.sendgrid.com")
+	request.Method = "POST"
+	request.Body = mail.GetRequestBody(m)
+	_, err := sendgrid.API(request)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func sendCustomerEmail(apiKey, host string, conf *types.MerchantConfig, payment *stripe.PaymentIntent) error {
+	details := payment.Charges.Data[0].BillingDetails
+
+	const tmpl = `
+	<br /><br />
+	Your receipt can be accessed <a href='{{ .Receipt }}'>here</a>.
+	<br/>
+	If clicking on that doesn't work, you can copy and paste the following URL into
+	your browser to access your receipt: {{ .Receipt }}.
+	<br /><br/>
+	You can download your boarding passes here: <a href='https://{{.Host}}/info/{{.MerchantID}}/passes/{{.PaymentID}}'>Click Here</a>
+	<br/>`
+
+	from := mail.NewEmail(conf.EmailName, conf.EmailFrom)
+	subject := "Tickets Purchased"
+	to := mail.NewEmail(details.Name, details.Email)
+
+	t := template.Must(template.New("notify").Parse(tmpl))
+	var tpl bytes.Buffer
+	if err := t.Execute(&tpl, gin.H{
+		"Receipt": payment.Charges.Data[0].ReceiptURL,
+		"Host":    host, "MerchantID": conf.ID, "PaymentID": payment.ID}); err != nil {
+		return err
+	}
+
+	content := mail.NewContent("text/html", conf.EmailContent+tpl.String())
+	log.Println("Send Email:", from, subject, to, content)
+	m := mail.NewV3MailInit(from, subject, to, content)
+	request := sendgrid.GetRequest(apiKey, "/v3/mail/send", "https://api.sendgrid.com")
+	request.Method = "POST"
+	request.Body = mail.GetRequestBody(m)
+	_, err := sendgrid.API(request)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
 type LineItem struct {
 	ID        string `json:"id" gorm:"primary_key"`
 	PaymentID string `json:"paymentId" gorm:"primary_key"`
@@ -192,41 +278,12 @@ func StripeWebhook(db *gorm.DB) gin.HandlerFunc {
 				Status:    string(paymentIntent.Status),
 			})
 
-			const tmpl = `
-			<br /><br />
-			Your receipt can be accessed <a href='{{ .Receipt }}'>here</a>.
-			<br/>
-			If clicking on that doesn't work, you can copy and paste the following URL into
-			your browser to access your receipt: {{ .Receipt }}.
-			<br /><br/>
-			You can download your boarding passes here: <a href='https://{{.Host}}/info/{{.MerchantID}}/passes/{{.PaymentID}}'>Click Here</a>
-			<br/>`
-
-			from := mail.NewEmail(conf.EmailName, conf.EmailFrom)
-			subject := "Tickets Purchased"
-			to := mail.NewEmail(details.Name, details.Email)
-
-			t := template.Must(template.New("notify").Parse(tmpl))
-			var tpl bytes.Buffer
-			if err := t.Execute(&tpl, gin.H{
-				"Receipt": paymentIntent.Charges.Data[0].ReceiptURL,
-				"Host":    c.Request.Host, "MerchantID": conf.ID, "PaymentID": paymentIntent.ID}); err != nil {
-				c.JSON(http.StatusFailedDependency, gin.H{"err": err.Error()})
-				return
-			}
-
-			content := mail.NewContent("text/html", conf.EmailContent+tpl.String())
-			log.Println("Send Email:", from, subject, to, content)
-			m := mail.NewV3MailInit(from, subject, to, content)
-			request := sendgrid.GetRequest(apiKey, "/v3/mail/send", "https://api.sendgrid.com")
-			request.Method = "POST"
-			request.Body = mail.GetRequestBody(m)
-			response, err := sendgrid.API(request)
+			err := sendCustomerEmail(apiKey, c.Request.Host, &conf, &paymentIntent)
 			if err != nil {
 				c.JSON(http.StatusFailedDependency, gin.H{"err": err.Error()})
 				return
 			}
-			c.Status(response.StatusCode)
+			c.Status(http.StatusOK)
 
 		case "checkout.session.completed":
 			var sess stripe.CheckoutSession
@@ -235,6 +292,17 @@ func StripeWebhook(db *gorm.DB) gin.HandlerFunc {
 				return
 			}
 
+			paymentParams := &stripe.PaymentIntentParams{}
+			paymentParams.AddExpand("charges")
+			paymentParams.AddExpand("payment_method")
+			paymentParams.SetStripeAccount(event.Account)
+			pm, err := paymentintent.Get(sess.PaymentIntent.ID, paymentParams)
+			if err != nil {
+				log.Println(err)
+			}
+
+			itemList := make([]notifyItem, 0)
+
 			params := &stripe.CheckoutSessionListLineItemsParams{}
 			params.AddExpand("data.price")
 			params.AddExpand("data.price.product")
@@ -242,6 +310,11 @@ func StripeWebhook(db *gorm.DB) gin.HandlerFunc {
 			i := session.ListLineItems(sess.ID, params)
 			for i.Next() {
 				li := i.LineItem()
+
+				itemList = append(itemList, notifyItem{
+					Name:     li.Price.Product.Name,
+					Quantity: int(li.Quantity),
+				})
 
 				db.Save(&LineItem{
 					ID:        li.ID,
@@ -254,6 +327,17 @@ func StripeWebhook(db *gorm.DB) gin.HandlerFunc {
 					UnitPrice: fmt.Sprintf("%0.2f", float64(li.Price.UnitAmount)/100.0),
 				})
 			}
+
+			if err := sendNotifyEmail(apiKey, &conf, pm, itemList); err != nil {
+				c.JSON(http.StatusFailedDependency, gin.H{"error": err.Error()})
+				return
+			}
+
+			if conf.SendSMS {
+				t := internal.NewTwilio(conf.TwilioAcctSID, conf.TwilioAcctToken)
+				t.Send(conf.NotifyNumber, "Tickets Purchased by "+pm.Charges.Data[0].BillingDetails.Name)
+			}
+
 		case "charge.refunded":
 			var charge stripe.Charge
 			if err := json.Unmarshal(event.Data.Raw, &charge); err != nil {

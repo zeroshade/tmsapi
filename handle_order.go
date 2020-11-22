@@ -107,8 +107,8 @@ func CaptureOrder(db *gorm.DB) gin.HandlerFunc {
 			}
 
 			if conf.SendSMS {
-				t := NewTwilio(conf.TwilioAcctSID, conf.TwilioAcctToken)
-				t.send(conf.NotifyNumber, "Tickets Purchased by "+order.Payer.Name.GivenName+" "+order.Payer.Name.Surname)
+				t := internal.NewTwilio(conf.TwilioAcctSID, conf.TwilioAcctToken)
+				t.Send(conf.NotifyNumber, "Tickets Purchased by "+order.Payer.Name.GivenName+" "+order.Payer.Name.Surname)
 			}
 
 			_, err := SendClientMail(apiKey, c.Request.Host, order.Payer.Email, order, &conf)
