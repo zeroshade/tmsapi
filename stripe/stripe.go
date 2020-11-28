@@ -126,9 +126,8 @@ func CreateSession(db *gorm.DB) gin.HandlerFunc {
 
 		params.PaymentIntentData = &stripe.CheckoutSessionPaymentIntentDataParams{
 			// ApplicationFeeAmount: stripe.Int64(int64(float64(total) * 0.02)),
-			Description:  stripe.String("Ticket Purchase"),
-			OnBehalfOf:   stripe.String(c.GetString("stripe_acct")),
-			TransferData: &stripe.CheckoutSessionPaymentIntentDataTransferDataParams{},
+			Description: stripe.String("Ticket Purchase"),
+			OnBehalfOf:  stripe.String(c.GetString("stripe_acct")),
 		}
 
 		// params.SetStripeAccount(c.GetString("stripe_acct"))
@@ -311,7 +310,8 @@ func StripeWebhook(db *gorm.DB) gin.HandlerFunc {
 			db.Find(&conf, "stripe_key = ?", pm.OnBehalfOf.ID)
 
 			itemList := make([]notifyItem, 0)
-			numTickets := int64(0)
+			primary := int64(0)
+			secondary := int64(0)
 
 			params := &stripe.CheckoutSessionListLineItemsParams{}
 			params.AddExpand("data.price")
@@ -327,7 +327,9 @@ func StripeWebhook(db *gorm.DB) gin.HandlerFunc {
 				})
 
 				if li.Price.Product.Name != feeItemName {
-					numTickets += li.Quantity
+					s := li.Quantity * 500
+					primary += li.AmountTotal - s
+					secondary += s
 				}
 
 				db.Save(&LineItem{
@@ -342,10 +344,7 @@ func StripeWebhook(db *gorm.DB) gin.HandlerFunc {
 				})
 			}
 
-			total := sess.AmountTotal
-			fee := int64(float64(sess.AmountTotal) * 0.02)
-			secondary := numTickets * 500
-			primary := total - fee - secondary
+			fmt.Printf("Total %d, Primary: %d, Secondary: %d\n", pm.Amount, primary, secondary)
 
 			transferParams := &stripe.TransferParams{}
 			transferParams.SourceTransaction = &pm.Charges.Data[0].ID
