@@ -17,6 +17,7 @@ import (
 	"github.com/stripe/stripe-go/v71"
 	"github.com/stripe/stripe-go/v71/checkout/session"
 	"github.com/stripe/stripe-go/v71/paymentintent"
+	"github.com/stripe/stripe-go/v71/transfer"
 	"github.com/zeroshade/tmsapi/internal"
 	"github.com/zeroshade/tmsapi/types"
 )
@@ -25,6 +26,8 @@ func AddStripeRoutes(router *gin.RouterGroup, acctHandler gin.HandlerFunc, db *g
 	router.GET("/stripe/:stripe_session", acctHandler, GetSession(db))
 	router.POST("/stripe", acctHandler, CreateSession(db))
 }
+
+const feeItemName = "Fees"
 
 type createCheckoutSessionResponse struct {
 	SessionID string `json:"id"`
@@ -54,7 +57,7 @@ func GetSession(db *gorm.DB) gin.HandlerFunc {
 		params.AddExpand("payment_intent.charges")
 		params.AddExpand("payment_intent.payment_method")
 		params.AddExpand("line_items")
-		params.SetStripeAccount(c.GetString("stripe_acct"))
+		// params.SetStripeAccount(c.GetString("stripe_acct"))
 		session, err := session.Get(c.Param("stripe_session"), params)
 		if err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -79,11 +82,12 @@ func CreateSession(db *gorm.DB) gin.HandlerFunc {
 		}
 
 		params := &stripe.CheckoutSessionParams{
-			PaymentMethodTypes: stripe.StringSlice([]string{"card"}),
-			Mode:               stripe.String(string(stripe.CheckoutSessionModePayment)),
-			SuccessURL:         stripe.String(c.Request.Header.Get("x-calendar-origin") + "?status=success&stripe_session_id={CHECKOUT_SESSION_ID}"),
-			CancelURL:          stripe.String(c.Request.Header.Get("x-calendar-origin") + "?status=cancelled&stripe_session_id={CHECKOUT_SESSION_ID}"),
-			LineItems:          []*stripe.CheckoutSessionLineItemParams{},
+			AllowPromotionCodes: stripe.Bool(true),
+			PaymentMethodTypes:  stripe.StringSlice([]string{"card"}),
+			Mode:                stripe.String(string(stripe.CheckoutSessionModePayment)),
+			SuccessURL:          stripe.String(c.Request.Header.Get("x-calendar-origin") + "?status=success&stripe_session_id={CHECKOUT_SESSION_ID}"),
+			CancelURL:           stripe.String(c.Request.Header.Get("x-calendar-origin") + "?status=cancelled&stripe_session_id={CHECKOUT_SESSION_ID}"),
+			LineItems:           []*stripe.CheckoutSessionLineItemParams{},
 		}
 
 		total := int64(0)
@@ -95,7 +99,7 @@ func CreateSession(db *gorm.DB) gin.HandlerFunc {
 				PriceData: &stripe.CheckoutSessionLineItemPriceDataParams{
 					Currency: stripe.String(string(stripe.CurrencyUSD)),
 					ProductData: &stripe.CheckoutSessionLineItemPriceDataProductDataParams{
-						Name: &item.Name,
+						Name: stripe.String(item.Name),
 						Metadata: map[string]string{
 							"sku": item.Sku,
 						},
@@ -113,7 +117,7 @@ func CreateSession(db *gorm.DB) gin.HandlerFunc {
 				PriceData: &stripe.CheckoutSessionLineItemPriceDataParams{
 					Currency: stripe.String(string(stripe.CurrencyUSD)),
 					ProductData: &stripe.CheckoutSessionLineItemPriceDataProductDataParams{
-						Name: stripe.String("Fees"),
+						Name: stripe.String(feeItemName),
 					},
 					UnitAmount: stripe.Int64(fee),
 				},
@@ -121,19 +125,21 @@ func CreateSession(db *gorm.DB) gin.HandlerFunc {
 		}
 
 		params.PaymentIntentData = &stripe.CheckoutSessionPaymentIntentDataParams{
-			ApplicationFeeAmount: stripe.Int64(int64(float64(total) * 0.02)),
-			Description:          stripe.String("Ticket Purchase"),
+			// ApplicationFeeAmount: stripe.Int64(int64(float64(total) * 0.02)),
+			Description:  stripe.String("Ticket Purchase"),
+			OnBehalfOf:   stripe.String(c.GetString("stripe_acct")),
+			TransferData: &stripe.CheckoutSessionPaymentIntentDataTransferDataParams{},
 		}
 
-		params.SetStripeAccount(c.GetString("stripe_acct"))
+		// params.SetStripeAccount(c.GetString("stripe_acct"))
 
-		session, err := session.New(params)
+		sess, err := session.New(params)
 		if err != nil {
 			c.JSON(http.StatusFailedDependency, gin.H{"error": err.Error()})
 			return
 		}
 
-		data := createCheckoutSessionResponse{SessionID: session.ID}
+		data := createCheckoutSessionResponse{SessionID: sess.ID}
 		c.JSON(http.StatusOK, data)
 	}
 }
@@ -255,9 +261,6 @@ func StripeWebhook(db *gorm.DB) gin.HandlerFunc {
 
 		fmt.Println(event.Type)
 
-		var conf types.MerchantConfig
-		db.Find(&conf, "stripe_key = ?", event.Account)
-
 		switch event.Type {
 		case "payment_intent.succeeded":
 			var paymentIntent stripe.PaymentIntent
@@ -266,11 +269,14 @@ func StripeWebhook(db *gorm.DB) gin.HandlerFunc {
 				return
 			}
 
+			var conf types.MerchantConfig
+			db.Find(&conf, "stripe_key = ?", paymentIntent.OnBehalfOf.ID)
+
 			details := paymentIntent.Charges.Data[0].BillingDetails
 
 			db.Save(&PaymentIntent{
 				ID:        paymentIntent.ID,
-				Acct:      event.Account,
+				Acct:      conf.StripeKey,
 				CreatedAt: time.Unix(paymentIntent.Created, 0),
 				Amount:    fmt.Sprintf("%0.2f", float64(paymentIntent.Amount)/100.0),
 				Email:     details.Email,
@@ -295,18 +301,22 @@ func StripeWebhook(db *gorm.DB) gin.HandlerFunc {
 			paymentParams := &stripe.PaymentIntentParams{}
 			paymentParams.AddExpand("charges")
 			paymentParams.AddExpand("payment_method")
-			paymentParams.SetStripeAccount(event.Account)
+			// paymentParams.SetStripeAccount(event.Account)
 			pm, err := paymentintent.Get(sess.PaymentIntent.ID, paymentParams)
 			if err != nil {
 				log.Println(err)
 			}
 
+			var conf types.MerchantConfig
+			db.Find(&conf, "stripe_key = ?", pm.OnBehalfOf.ID)
+
 			itemList := make([]notifyItem, 0)
+			numTickets := int64(0)
 
 			params := &stripe.CheckoutSessionListLineItemsParams{}
 			params.AddExpand("data.price")
 			params.AddExpand("data.price.product")
-			params.SetStripeAccount(event.Account)
+			// params.SetStripeAccount(event.Account)
 			i := session.ListLineItems(sess.ID, params)
 			for i.Next() {
 				li := i.LineItem()
@@ -316,10 +326,14 @@ func StripeWebhook(db *gorm.DB) gin.HandlerFunc {
 					Quantity: int(li.Quantity),
 				})
 
+				if li.Price.Product.Name != feeItemName {
+					numTickets += li.Quantity
+				}
+
 				db.Save(&LineItem{
 					ID:        li.ID,
 					PaymentID: sess.PaymentIntent.ID,
-					Acct:      event.Account,
+					Acct:      conf.StripeKey,
 					Quantity:  int(li.Quantity),
 					Name:      li.Price.Product.Name,
 					Sku:       li.Price.Product.Metadata["sku"],
@@ -327,6 +341,33 @@ func StripeWebhook(db *gorm.DB) gin.HandlerFunc {
 					UnitPrice: fmt.Sprintf("%0.2f", float64(li.Price.UnitAmount)/100.0),
 				})
 			}
+
+			total := sess.AmountTotal
+			fee := int64(float64(sess.AmountTotal) * 0.02)
+			secondary := numTickets * 500
+			primary := total - fee - secondary
+
+			transferParams := &stripe.TransferParams{}
+			transferParams.SourceTransaction = &pm.Charges.Data[0].ID
+			transferParams.Currency = stripe.String(string(stripe.CurrencyUSD))
+			transferParams.Destination = &conf.StripeKey
+			transferParams.Amount = stripe.Int64(primary)
+			t, err := transfer.New(transferParams)
+			if err != nil {
+				c.JSON(http.StatusFailedDependency, gin.H{"error": err.Error()})
+				return
+			}
+			fmt.Println("Primary Transfer:", t.ID, t.Amount)
+
+			transferParams.Destination = &conf.StripeSecondary
+			transferParams.Amount = stripe.Int64(secondary)
+			t, err = transfer.New(transferParams)
+			if err != nil {
+				c.JSON(http.StatusFailedDependency, gin.H{"error": err.Error()})
+				return
+			}
+
+			log.Println("Secondary Transfer:", t.ID, t.Amount)
 
 			if err := sendNotifyEmail(apiKey, &conf, pm, itemList); err != nil {
 				c.JSON(http.StatusFailedDependency, gin.H{"error": err.Error()})

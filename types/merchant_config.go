@@ -21,5 +21,6 @@ type MerchantConfig struct {
 	TwilioAcctToken  string `json:"-"`
 	TwilioFromNumber string `json:"-"`
 	StripeKey        string `json:"-"`
+	StripeSecondary  string `json:"-"`
 	PaymentType      string `json:"-"`
 }
