@@ -110,7 +110,7 @@ func CreateSession(db *gorm.DB) gin.HandlerFunc {
 			})
 		}
 
-		fee := (total / 5000) * 300
+		fee := int64(float64(total) * 0.06)
 		if fee > 0 {
 			params.LineItems = append(params.LineItems, &stripe.CheckoutSessionLineItemParams{
 				Quantity: stripe.Int64(1),
