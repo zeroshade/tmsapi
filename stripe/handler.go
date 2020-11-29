@@ -1,9 +1,12 @@
 package stripe
 
 import (
+	"log"
 	"time"
 
 	"github.com/jinzhu/gorm"
+	"github.com/stripe/stripe-go/v71"
+	"github.com/stripe/stripe-go/v71/paymentintent"
 	"github.com/zeroshade/tmsapi/types"
 )
 
@@ -24,6 +27,7 @@ func (h Handler) OrdersTimestamp(config *types.MerchantConfig, db *gorm.DB, time
 		Prod      string    `json:"name"`
 		Name      string    `json:"payer"`
 		Email     string    `json:"email"`
+		Phone     string    `json:"phone"`
 		CreatedAt time.Time `json:"created"`
 		Sku       string    `json:"sku"`
 		Status    string    `json:"status"`
@@ -36,6 +40,35 @@ func (h Handler) OrdersTimestamp(config *types.MerchantConfig, db *gorm.DB, time
 		Select("li.id, payment_id, li.acct, quantity, sku, li.name AS prod, pi.name, pi.email, created_at, status").
 		Scan(&ret)
 
+	piCustomerMap := make(map[string]*stripe.Customer)
+	params := &stripe.PaymentIntentParams{}
+	params.AddExpand("customer")
+	for idx := range ret {
+		r := &ret[idx]
+		var (
+			cus *stripe.Customer
+			ok  bool
+		)
+		if cus, ok = piCustomerMap[r.PaymentID]; !ok {
+			pi, err := paymentintent.Get(r.PaymentID, params)
+			if err != nil {
+				log.Println("PI:", err)
+				continue
+			}
+			cus = pi.Customer
+			piCustomerMap[r.PaymentID] = cus
+		}
+
+		if cus.Email != "" {
+			r.Email = cus.Email
+		}
+		if cus.Phone != "" {
+			r.Phone = cus.Phone
+		}
+		if cus.Name != "" {
+			r.Name = cus.Name
+		}
+	}
 	return ret, nil
 }
 

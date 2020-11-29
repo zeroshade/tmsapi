@@ -16,6 +16,7 @@ import (
 	"github.com/sendgrid/sendgrid-go/helpers/mail"
 	"github.com/stripe/stripe-go/v71"
 	"github.com/stripe/stripe-go/v71/checkout/session"
+	"github.com/stripe/stripe-go/v71/customer"
 	"github.com/stripe/stripe-go/v71/paymentintent"
 	"github.com/stripe/stripe-go/v71/transfer"
 	"github.com/zeroshade/tmsapi/internal"
@@ -36,6 +37,13 @@ type createCheckoutSessionResponse struct {
 type Money struct {
 	CurrencyCode string  `json:"currency_code"`
 	Value        float32 `json:"value,string"`
+}
+
+type CreateSessionRequest struct {
+	Items []Item `json:"items"`
+	Name  string `json:"name"`
+	Email string `json:"email"`
+	Phone string `json:"phone"`
 }
 
 type Item struct {
@@ -75,13 +83,31 @@ func CreateSession(db *gorm.DB) gin.HandlerFunc {
 	// }
 
 	return func(c *gin.Context) {
-		var cart []Item
+		var cart CreateSessionRequest
 		if err := c.ShouldBindJSON(&cart); err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 			return
 		}
 
+		var cus *stripe.Customer
+
+		iter := customer.List(&stripe.CustomerListParams{Email: &cart.Email})
+		if iter.Next() {
+			cus = iter.Customer()
+		} else {
+			var err error
+			cus, err = customer.New(&stripe.CustomerParams{
+				Name:  &cart.Name,
+				Email: &cart.Email,
+				Phone: &cart.Phone,
+			})
+			if err != nil {
+				log.Println("Create Customer Error:", err)
+			}
+		}
+
 		params := &stripe.CheckoutSessionParams{
+			Customer:            &cus.ID,
 			AllowPromotionCodes: stripe.Bool(true),
 			PaymentMethodTypes:  stripe.StringSlice([]string{"card"}),
 			Mode:                stripe.String(string(stripe.CheckoutSessionModePayment)),
@@ -91,7 +117,7 @@ func CreateSession(db *gorm.DB) gin.HandlerFunc {
 		}
 
 		total := int64(0)
-		for _, item := range cart {
+		for _, item := range cart.Items {
 			unit := int64(item.UnitAmount.Value * 100)
 			quant := int64(item.Quantity)
 			total += (unit * quant)
