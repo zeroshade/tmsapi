@@ -310,6 +310,13 @@ func StripeWebhook(db *gorm.DB) gin.HandlerFunc {
 			db.Find(&conf, "stripe_key = ?", paymentIntent.OnBehalfOf.ID)
 
 			// details := paymentIntent.Charges.Data[0].BillingDetails
+			if paymentIntent.Customer.Name == "" {
+				cus, err := customer.Get(paymentIntent.Customer.ID, &stripe.CustomerParams{})
+				if err != nil {
+					log.Println("Customer Fetch Error:", err)
+				}
+				paymentIntent.Customer = cus
+			}
 
 			db.Save(&PaymentIntent{
 				ID:        paymentIntent.ID,
@@ -336,6 +343,7 @@ func StripeWebhook(db *gorm.DB) gin.HandlerFunc {
 			}
 
 			paymentParams := &stripe.PaymentIntentParams{}
+			paymentParams.AddExpand("customer")
 			paymentParams.AddExpand("charges")
 			paymentParams.AddExpand("payment_method")
 			// paymentParams.SetStripeAccount(event.Account)
