@@ -44,7 +44,7 @@ func (h Handler) OrdersTimestamp(config *types.MerchantConfig, db *gorm.DB, time
 	db.Table("line_items AS li").
 		Joins("LEFT JOIN payment_intents AS pi ON (pi.id = li.payment_id)").
 		Where("li.acct = ? AND SUBSTRING(li.sku FROM '\\d+[A-Z]+(\\d{10})\\d*') = ?", config.StripeKey, timestamp).
-		Select("li.id, payment_id, li.acct, quantity, sku, li.name AS prod, pi.name, pi.email, created_at, li.status").
+		Select("li.id, payment_id, li.acct, quantity, sku, li.name AS prod, pi.name, pi.email, created_at, coalesce(li.status, pi.status) AS status").
 		Scan(&ret)
 
 	piCustomerMap := make(map[string]*stripe.Customer)
