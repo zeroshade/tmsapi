@@ -1,12 +1,19 @@
 package stripe
 
 import (
+	"encoding/json"
+	"fmt"
 	"log"
+	"strconv"
 	"time"
 
+	"github.com/gin-gonic/gin"
 	"github.com/jinzhu/gorm"
 	"github.com/stripe/stripe-go/v71"
 	"github.com/stripe/stripe-go/v71/paymentintent"
+	"github.com/stripe/stripe-go/v71/refund"
+	"github.com/stripe/stripe-go/v71/reversal"
+	"github.com/stripe/stripe-go/v71/transfer"
 	"github.com/zeroshade/tmsapi/types"
 )
 
@@ -37,7 +44,7 @@ func (h Handler) OrdersTimestamp(config *types.MerchantConfig, db *gorm.DB, time
 	db.Table("line_items AS li").
 		Joins("LEFT JOIN payment_intents AS pi ON (pi.id = li.payment_id)").
 		Where("li.acct = ? AND SUBSTRING(li.sku FROM '\\d+[A-Z]+(\\d{10})\\d*') = ?", config.StripeKey, timestamp).
-		Select("li.id, payment_id, li.acct, quantity, sku, li.name AS prod, pi.name, pi.email, created_at, status").
+		Select("li.id, payment_id, li.acct, quantity, sku, li.name AS prod, pi.name, pi.email, created_at, li.status").
 		Scan(&ret)
 
 	piCustomerMap := make(map[string]*stripe.Customer)
@@ -94,6 +101,77 @@ func (h Handler) GetSoldTickets(config *types.MerchantConfig, db *gorm.DB, from,
 	}
 
 	return out, nil
+}
+
+type RefundInfo struct {
+	PaymentIntentID string `json:"paymentId"`
+	LineItemID      string `json:"itemId"`
+}
+
+func (h Handler) RefundTickets(config *types.MerchantConfig, db *gorm.DB, data json.RawMessage) (interface{}, error) {
+	info := make([]RefundInfo, 0)
+	err := json.Unmarshal(data, &info)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, i := range info {
+		var item LineItem
+		db.Find(&item, &LineItem{ID: i.LineItemID, PaymentID: i.PaymentIntentID, Acct: config.StripeKey})
+
+		params := &stripe.PaymentIntentParams{}
+		pi, err := paymentintent.Get(item.PaymentID, params)
+		if err != nil {
+			return nil, err
+		}
+
+		fmt.Printf("%+v\n", pi.Charges.Data[0])
+
+		amt, err := strconv.ParseFloat(item.Amount[1:], 32)
+		if err != nil {
+			fmt.Println(err)
+		}
+
+		iter := transfer.List(&stripe.TransferListParams{TransferGroup: &pi.TransferGroup})
+		for iter.Next() {
+			acctID := iter.Transfer().Destination.ID
+
+			// fmt.Println(amt, acctID, iter.Transfer().Amount)
+			var reverseAmount int64
+
+			switch acctID {
+			case config.StripeKey:
+				reverseAmount = int64(int(amt*100) - (item.Quantity * 500))
+				// fmt.Println("Refund:", int(amt*100)-(item.Quantity*500), acctID)
+			case config.StripeSecondary:
+				reverseAmount = int64(item.Quantity * 500)
+				// fmt.Println("Refund:", item.Quantity*500, acctID)
+			}
+
+			rev, err := reversal.New(&stripe.ReversalParams{
+				Amount:   &reverseAmount,
+				Transfer: &iter.Transfer().ID,
+			})
+			if err != nil {
+				fmt.Println(err)
+			}
+			fmt.Printf("%+v\n", rev)
+		}
+
+		ref, err := refund.New(&stripe.RefundParams{
+			Amount:        stripe.Int64(int64(amt * 100)),
+			PaymentIntent: &pi.ID,
+		})
+		if err != nil {
+			return nil, err
+		}
+
+		fmt.Printf("%+v\n", ref)
+		item.Status = "refunded"
+		db.Save(&item)
+	}
+
+	return gin.H{"status": "success"}, nil
 }
 
 type passitem struct {

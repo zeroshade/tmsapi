@@ -1,6 +1,8 @@
 package paypal
 
 import (
+	"encoding/json"
+	"errors"
 	"time"
 
 	"github.com/jinzhu/gorm"
@@ -15,6 +17,10 @@ func init() {
 }
 
 type Handler struct{}
+
+func (h Handler) RefundTickets(*types.MerchantConfig, *gorm.DB, json.RawMessage) (interface{}, error) {
+	return nil, errors.New("Not implemented")
+}
 
 func (h Handler) OrdersTimestamp(config *types.MerchantConfig, db *gorm.DB, timestamp string) (interface{}, error) {
 	type Ret struct {

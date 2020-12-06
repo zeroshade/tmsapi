@@ -90,12 +90,23 @@ func CreateSession(db *gorm.DB) gin.HandlerFunc {
 		}
 
 		var cus *stripe.Customer
+		var err error
 
 		iter := customer.List(&stripe.CustomerListParams{Email: &cart.Email})
 		if iter.Next() {
 			cus = iter.Customer()
+			if cus.Phone == "" {
+				cus, err = customer.Update(cus.ID, &stripe.CustomerParams{
+					Name:  &cus.Name,
+					Email: &cus.Email,
+					Phone: &cart.Phone,
+				})
+				if err != nil {
+					log.Println("Create customer error:", err)
+				}
+			}
 		} else {
-			var err error
+
 			cus, err = customer.New(&stripe.CustomerParams{
 				Name:  &cart.Name,
 				Email: &cart.Email,
@@ -226,7 +237,7 @@ func sendNotifyEmail(apiKey string, conf *types.MerchantConfig, payment *stripe.
 }
 
 func sendCustomerEmail(apiKey, host string, conf *types.MerchantConfig, payment *stripe.PaymentIntent) error {
-	details := payment.Charges.Data[0].BillingDetails
+	details := payment.Customer
 
 	const tmpl = `
 	<br /><br />
@@ -272,6 +283,7 @@ type LineItem struct {
 	Name      string `json:"name"`
 	UnitPrice string `json:"unitPrice" gorm:"type:money"`
 	Amount    string `json:"total" gorm:"type:money"`
+	Status    string `json:"status"`
 }
 
 func StripeWebhook(db *gorm.DB) gin.HandlerFunc {
@@ -297,15 +309,15 @@ func StripeWebhook(db *gorm.DB) gin.HandlerFunc {
 			var conf types.MerchantConfig
 			db.Find(&conf, "stripe_key = ?", paymentIntent.OnBehalfOf.ID)
 
-			details := paymentIntent.Charges.Data[0].BillingDetails
+			// details := paymentIntent.Charges.Data[0].BillingDetails
 
 			db.Save(&PaymentIntent{
 				ID:        paymentIntent.ID,
 				Acct:      conf.StripeKey,
 				CreatedAt: time.Unix(paymentIntent.Created, 0),
 				Amount:    fmt.Sprintf("%0.2f", float64(paymentIntent.Amount)/100.0),
-				Email:     details.Email,
-				Name:      details.Name,
+				Email:     paymentIntent.Customer.Email,
+				Name:      paymentIntent.Customer.Name,
 				Status:    string(paymentIntent.Status),
 			})
 
@@ -367,6 +379,7 @@ func StripeWebhook(db *gorm.DB) gin.HandlerFunc {
 					Sku:       li.Price.Product.Metadata["sku"],
 					Amount:    fmt.Sprintf("%0.2f", float64(li.AmountTotal)/100.0),
 					UnitPrice: fmt.Sprintf("%0.2f", float64(li.Price.UnitAmount)/100.0),
+					Status:    string(pm.Status),
 				})
 			}
 

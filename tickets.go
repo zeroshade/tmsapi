@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"net/http"
 	"time"
 
@@ -22,6 +23,7 @@ func addTicketRoutes(router *gin.RouterGroup, db *gorm.DB) {
 	router.GET("/orders/:timestamp", checkJWT(), OrdersTimestamp(db))
 	router.GET("/orders", GetCheckouts(db))
 	router.POST("/passes", GetPasses(db))
+	router.POST("/refund", checkJWT(), logActionMiddle(db), RefundTickets(db))
 }
 
 // TicketCategory holds the name of a price type and the mapping of
@@ -114,6 +116,7 @@ type PaymentHandler interface {
 	OrdersTimestamp(config *types.MerchantConfig, db *gorm.DB, timestamp string) (interface{}, error)
 	GetSoldTickets(config *types.MerchantConfig, db *gorm.DB, from, to string) (interface{}, error)
 	GetPassItems(conf *types.MerchantConfig, db *gorm.DB, id string) ([]types.PassItem, string)
+	RefundTickets(config *types.MerchantConfig, db *gorm.DB, data json.RawMessage) (interface{}, error)
 }
 
 func OrdersTimestamp(db *gorm.DB) gin.HandlerFunc {
@@ -271,5 +274,34 @@ func GetPasses(db *gorm.DB) gin.HandlerFunc {
 		}
 
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Must have at least one"})
+	}
+}
+
+func RefundTickets(db *gorm.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		var data json.RawMessage
+		if err := c.ShouldBindJSON(&data); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+
+		var config types.MerchantConfig
+		db.Find(&config, "id = ?", c.Param("merchantid"))
+
+		var handler PaymentHandler
+		switch config.PaymentType {
+		case "paypal":
+			handler = &paypal.Handler{}
+		case "stripe":
+			handler = &stripe.Handler{}
+		}
+
+		ret, err := handler.RefundTickets(&config, db, data)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+
+		c.JSON(http.StatusOK, ret)
 	}
 }
