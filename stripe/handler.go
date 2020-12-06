@@ -38,13 +38,20 @@ func (h Handler) OrdersTimestamp(config *types.MerchantConfig, db *gorm.DB, time
 		CreatedAt time.Time `json:"created"`
 		Sku       string    `json:"sku"`
 		Status    string    `json:"status"`
+		OrigSku   string    `json:"origSku"`
+		OrigProd  string    `json:"origName"`
 	}
 
 	var ret []Ret
 	db.Table("line_items AS li").
 		Joins("LEFT JOIN payment_intents AS pi ON (pi.id = li.payment_id)").
-		Where("li.acct = ? AND SUBSTRING(li.sku FROM '\\d+[A-Z]+(\\d{10})\\d*') = ?", config.StripeKey, timestamp).
-		Select("li.id, payment_id, li.acct, quantity, sku, li.name AS prod, pi.name, pi.email, created_at, coalesce(li.status, pi.status) AS status").
+		Joins("LEFT JOIN transfer_reqs AS tr ON (li.id = tr.line_item_id)").
+		Where("li.acct = ? AND SUBSTRING(coalesce(new_sku, sku) FROM '\\d+[A-Z]+(\\d{10})\\d*') = ?", config.StripeKey, timestamp).
+		Select([]string{"li.id", "payment_id", "li.acct", "quantity",
+			"coalesce(new_sku, sku) as sku",
+			"coalesce(new_name, li.name) AS prod",
+			"pi.name", "pi.email", "created_at",
+			"coalesce(li.status, pi.status) AS status", "sku AS orig_sku", "li.name AS orig_prod"}).
 		Scan(&ret)
 
 	piCustomerMap := make(map[string]*stripe.Customer)
@@ -86,12 +93,13 @@ func (h Handler) GetSoldTickets(config *types.MerchantConfig, db *gorm.DB, from,
 		Pid   uint      `json:"pid"`
 	}
 
-	fromSku := "TO_TIMESTAMP(SUBSTRING(sku FROM '\\d[A-Z]+(\\d{10})\\d*')::INTEGER)"
+	fromSku := "TO_TIMESTAMP(SUBSTRING(coalesce(new_sku, sku) FROM '\\d[A-Z]+(\\d{10})\\d*')::INTEGER)"
 
 	var out []result
-	db.Model(&LineItem{}).
-		Select(`(regexp_matches(sku, '^\d+'))[1]::integer as pid, `+fromSku+` as stamp, SUM(quantity) AS qty`).
-		Where("acct = ? AND "+fromSku+" BETWEEN TO_TIMESTAMP(?) AND TO_TIMESTAMP(?)",
+	db.Table("line_items AS li").
+		Joins("LEFT JOIN transfer_reqs AS tr ON (li.id = tr.line_item_id)").
+		Select(`(regexp_matches(coalesce(new_sku, sku), '^\d+'))[1]::integer as pid, `+fromSku+` as stamp, SUM(quantity) AS qty`).
+		Where("acct = ? AND status = 'succeeded' AND "+fromSku+" BETWEEN TO_TIMESTAMP(?) AND TO_TIMESTAMP(?)",
 			config.StripeKey, from, to).
 		Group("pid, stamp").
 		Scan(&out)
@@ -193,9 +201,10 @@ func (p *passitem) GetID() string     { return p.PaymentID }
 func (h Handler) GetPassItems(config *types.MerchantConfig, db *gorm.DB, id string) ([]types.PassItem, string) {
 	var items []passitem
 
-	db.Model(&LineItem{}).
-		Where("payment_id = ? AND sku != ''", id).
-		Select([]string{"payment_id", "id", "quantity", "sku", "name", "amount",
+	db.Table("line_items AS li").
+		Joins("left join transfer_reqs AS tr ON (li.id = tr.line_item_id)").
+		Where("payment_id = ? AND coalesce(new_sku, sku) != ''", id).
+		Select([]string{"payment_id", "id", "quantity", "coalesce(new_sku, sku)", "coalesce(new_name, name)", "amount",
 			`SUBSTRING(name from '\w* Ticket, [^,]*, (.*)') as description`}).
 		Scan(&items)
 
@@ -213,4 +222,11 @@ func (h Handler) GetPassItems(config *types.MerchantConfig, db *gorm.DB, id stri
 	}
 
 	return ret, name
+}
+
+func (h Handler) TransferTickets(conig *types.MerchantConfig, db *gorm.DB, data []types.TransferReq) (interface{}, error) {
+	for idx := range data {
+		db.Save(&data[idx])
+	}
+	return nil, nil
 }
