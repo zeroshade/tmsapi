@@ -13,3 +13,11 @@ type TransferReq struct {
 	NewSKU     string `json:"newsku"`
 	NewName    string `json:"newname"`
 }
+
+type GiftCard struct {
+	ID        string `gorm:"primary_key"`
+	Initial   string `gorm:"type:money"`
+	Balance   float64
+	PaymentID string
+	Status    string
+}

@@ -8,10 +8,12 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/jinzhu/gorm"
+	"github.com/lithammer/shortuuid/v3"
 	"github.com/sendgrid/sendgrid-go"
 	"github.com/sendgrid/sendgrid-go/helpers/mail"
 	"github.com/stripe/stripe-go/v71"
@@ -40,6 +42,7 @@ type Money struct {
 }
 
 type CreateSessionRequest struct {
+	Type  string `json:"type,omitempty"`
 	Items []Item `json:"items"`
 	Name  string `json:"name"`
 	Email string `json:"email"`
@@ -118,28 +121,45 @@ func CreateSession(db *gorm.DB) gin.HandlerFunc {
 		}
 
 		params := &stripe.CheckoutSessionParams{
-			Customer:            &cus.ID,
-			AllowPromotionCodes: stripe.Bool(true),
-			PaymentMethodTypes:  stripe.StringSlice([]string{"card"}),
-			Mode:                stripe.String(string(stripe.CheckoutSessionModePayment)),
-			SuccessURL:          stripe.String(c.Request.Header.Get("x-calendar-origin") + "?status=success&stripe_session_id={CHECKOUT_SESSION_ID}"),
-			CancelURL:           stripe.String(c.Request.Header.Get("x-calendar-origin") + "?status=cancelled&stripe_session_id={CHECKOUT_SESSION_ID}"),
-			LineItems:           []*stripe.CheckoutSessionLineItemParams{},
+			Customer: &cus.ID,
+			// AllowPromotionCodes: stripe.Bool(true),
+			PaymentMethodTypes: stripe.StringSlice([]string{"card"}),
+			Mode:               stripe.String(string(stripe.CheckoutSessionModePayment)),
+			SuccessURL:         stripe.String(c.Request.Header.Get("x-calendar-origin") + "?status=success&stripe_session_id={CHECKOUT_SESSION_ID}"),
+			CancelURL:          stripe.String(c.Request.Header.Get("x-calendar-origin") + "?status=cancelled&stripe_session_id={CHECKOUT_SESSION_ID}"),
+			LineItems:          []*stripe.CheckoutSessionLineItemParams{},
 		}
 
+		var giftCards []*types.GiftCard
 		total := int64(0)
 		for _, item := range cart.Items {
 			unit := int64(item.UnitAmount.Value * 100)
 			quant := int64(item.Quantity)
 			total += (unit * quant)
+
+			metadata := map[string]string{"sku": item.Sku}
+			if strings.HasPrefix(item.Sku, "GIFT") {
+				if giftCards == nil {
+					giftCards = make([]*types.GiftCard, 0)
+				}
+
+				for i := int64(0); i < quant; i++ {
+					giftCards = append(giftCards, &types.GiftCard{
+						ID:      shortuuid.New(),
+						Initial: fmt.Sprintf("%0.2f", float64(unit)/100.0),
+						Balance: float64(unit) / 100.0,
+						Status:  "pending",
+					})
+				}
+			}
+
 			params.LineItems = append(params.LineItems, &stripe.CheckoutSessionLineItemParams{
 				PriceData: &stripe.CheckoutSessionLineItemPriceDataParams{
 					Currency: stripe.String(string(stripe.CurrencyUSD)),
 					ProductData: &stripe.CheckoutSessionLineItemPriceDataProductDataParams{
-						Name: stripe.String(item.Name),
-						Metadata: map[string]string{
-							"sku": item.Sku,
-						},
+						Name:        stripe.String(item.Name),
+						Description: stripe.String(item.Desc),
+						Metadata:    metadata,
 					},
 					UnitAmount: &unit,
 				},
@@ -161,10 +181,16 @@ func CreateSession(db *gorm.DB) gin.HandlerFunc {
 			})
 		}
 
+		desc := "Ticket Purchase"
+		if cart.Type == "giftcards" {
+			desc = "Gift Card Purchase"
+		}
+
 		params.PaymentIntentData = &stripe.CheckoutSessionPaymentIntentDataParams{
 			// ApplicationFeeAmount: stripe.Int64(int64(float64(total) * 0.02)),
-			Description: stripe.String("Ticket Purchase"),
+			Description: stripe.String(desc),
 			OnBehalfOf:  stripe.String(c.GetString("stripe_acct")),
+			Metadata:    map[string]string{"type": cart.Type},
 		}
 
 		// params.SetStripeAccount(c.GetString("stripe_acct"))
@@ -175,6 +201,12 @@ func CreateSession(db *gorm.DB) gin.HandlerFunc {
 			return
 		}
 
+		if giftCards != nil {
+			for _, c := range giftCards {
+				c.PaymentID = sess.PaymentIntent.ID
+				db.Create(c)
+			}
+		}
 		data := createCheckoutSessionResponse{SessionID: sess.ID}
 		c.JSON(http.StatusOK, data)
 	}
@@ -239,7 +271,7 @@ func sendNotifyEmail(apiKey string, conf *types.MerchantConfig, payment *stripe.
 func sendCustomerEmail(apiKey, host string, conf *types.MerchantConfig, payment *stripe.PaymentIntent) error {
 	details := payment.Customer
 
-	const tmpl = `
+	const tickettmpl = `
 	<br /><br />
 	Your receipt can be accessed <a href='{{ .Receipt }}'>here</a>.
 	<br/>
@@ -249,8 +281,27 @@ func sendCustomerEmail(apiKey, host string, conf *types.MerchantConfig, payment 
 	You can download your boarding passes here: <a href='https://{{.Host}}/info/{{.MerchantID}}/passes/{{.PaymentID}}'>Click Here</a>
 	<br/>`
 
-	from := mail.NewEmail(conf.EmailName, conf.EmailFrom)
+	const gifttmpl = `
+	<br /><br />
+	Your receipt can be accessed <a href='{{ .Receipt }}'>here</a>.
+	<br />
+	If clicking on that doesn't work, you can copy and pages the following URL into
+	your browser to access your receipt: {{ .Receipt}}.
+	<br /><br />
+	You should receive another e-mail shortly with the Gift Codes for your purchased Gift Cards.
+	<br />`
+
+	tmpl := tickettmpl
 	subject := "Tickets Purchased"
+
+	typ, ok := payment.Metadata["type"]
+	if ok && typ == "giftcards" {
+		tmpl = gifttmpl
+		subject = "Gift Cards Purchased"
+	}
+
+	from := mail.NewEmail(conf.EmailName, conf.EmailFrom)
+
 	to := mail.NewEmail(details.Name, details.Email)
 
 	t := template.Must(template.New("notify").Parse(tmpl))
@@ -271,6 +322,54 @@ func sendCustomerEmail(apiKey, host string, conf *types.MerchantConfig, payment 
 	if err != nil {
 		return err
 	}
+	return nil
+}
+
+func sendGiftCardEmail(apiKey string, giftCards []types.GiftCard, conf *types.MerchantConfig, payment *stripe.PaymentIntent) error {
+	const tmpl = `
+	Thank you for your purchase of Gift Cards! Below you'll find the codes which can be entered
+	at checkout which can be given to your desired recipients.
+	<br />
+	<strong>Gift Card Codes are Case Sensitive at checkout!</strong>
+	<br /><br />
+	<table>
+		<thead>
+			<tr>
+				<th>Value</th>
+				<th>Code</th>
+			</tr>
+		</thead>
+		<tbody>
+	{{ range .GiftCards }}
+			<tr>
+				<td>{{ .Initial }}</td>
+				<td>{{ .ID }}</td>
+			</tr>
+	{{ end }}
+		</tbody>
+	</table>
+	`
+
+	from := mail.NewEmail(conf.EmailName, conf.EmailFrom)
+	to := mail.NewEmail(payment.Customer.Name, payment.Customer.Email)
+	subject := "Gift Card Codes"
+	t := template.Must(template.New("codes").Parse(tmpl))
+	var tpl bytes.Buffer
+	if err := t.Execute(&tpl, gin.H{"GiftCards": giftCards}); err != nil {
+		return err
+	}
+
+	content := mail.NewContent("text/html", tpl.String())
+	log.Println("Send Email:", from, subject, to, content)
+	m := mail.NewV3MailInit(from, subject, to, content)
+	request := sendgrid.GetRequest(apiKey, "/v3/mail/send", "https://api.sendgrid.com")
+	request.Method = "POST"
+	request.Body = mail.GetRequestBody(m)
+	_, err := sendgrid.API(request)
+	if err != nil {
+		return err
+	}
+
 	return nil
 }
 
@@ -333,6 +432,15 @@ func StripeWebhook(db *gorm.DB) gin.HandlerFunc {
 				c.JSON(http.StatusFailedDependency, gin.H{"err": err.Error()})
 				return
 			}
+
+			var giftCards []types.GiftCard
+			db.Find(&giftCards, "payment_id = ?", paymentIntent.ID)
+			if len(giftCards) > 0 {
+				db.Model(&types.GiftCard{}).Where("payment_id = ?", paymentIntent.ID).Update("status", "success")
+
+				sendGiftCardEmail(apiKey, giftCards, &conf, &paymentIntent)
+			}
+
 			c.Status(http.StatusOK)
 
 		case "checkout.session.completed":
