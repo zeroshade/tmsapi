@@ -8,6 +8,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -16,11 +17,12 @@ import (
 	"github.com/lithammer/shortuuid/v3"
 	"github.com/sendgrid/sendgrid-go"
 	"github.com/sendgrid/sendgrid-go/helpers/mail"
-	"github.com/stripe/stripe-go/v71"
-	"github.com/stripe/stripe-go/v71/checkout/session"
-	"github.com/stripe/stripe-go/v71/customer"
-	"github.com/stripe/stripe-go/v71/paymentintent"
-	"github.com/stripe/stripe-go/v71/transfer"
+	"github.com/stripe/stripe-go/v72"
+	"github.com/stripe/stripe-go/v72/checkout/session"
+	"github.com/stripe/stripe-go/v72/coupon"
+	"github.com/stripe/stripe-go/v72/customer"
+	"github.com/stripe/stripe-go/v72/paymentintent"
+	"github.com/stripe/stripe-go/v72/transfer"
 	"github.com/zeroshade/tmsapi/internal"
 	"github.com/zeroshade/tmsapi/types"
 )
@@ -28,6 +30,7 @@ import (
 func AddStripeRoutes(router *gin.RouterGroup, acctHandler gin.HandlerFunc, db *gorm.DB) {
 	router.GET("/stripe/:stripe_session", acctHandler, GetSession(db))
 	router.POST("/stripe", acctHandler, CreateSession(db))
+	router.GET("/giftcard/:id", acctHandler, CheckGiftcard(db))
 }
 
 const feeItemName = "Fees"
@@ -42,11 +45,12 @@ type Money struct {
 }
 
 type CreateSessionRequest struct {
-	Type  string `json:"type,omitempty"`
-	Items []Item `json:"items"`
-	Name  string `json:"name"`
-	Email string `json:"email"`
-	Phone string `json:"phone"`
+	Type        string `json:"type,omitempty"`
+	Items       []Item `json:"items"`
+	Name        string `json:"name"`
+	Email       string `json:"email"`
+	Phone       string `json:"phone"`
+	UseGiftCard string `json:"useGift"`
 }
 
 type Item struct {
@@ -59,6 +63,19 @@ type Item struct {
 
 func init() {
 	stripe.Key = os.Getenv("STRIPE_KEY")
+}
+
+func CheckGiftcard(db *gorm.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		var gift types.GiftCard
+		db.Find(&gift, "id = ? AND status = 'success'", c.Param("id"))
+
+		if gift.ID == c.Param("id") {
+			c.JSON(http.StatusOK, &gift)
+		} else {
+			c.Status(http.StatusNotFound)
+		}
+	}
 }
 
 func GetSession(db *gorm.DB) gin.HandlerFunc {
@@ -153,12 +170,16 @@ func CreateSession(db *gorm.DB) gin.HandlerFunc {
 				}
 			}
 
+			var desc *string
+			if item.Desc != "" {
+				desc = stripe.String(item.Desc)
+			}
 			params.LineItems = append(params.LineItems, &stripe.CheckoutSessionLineItemParams{
 				PriceData: &stripe.CheckoutSessionLineItemPriceDataParams{
 					Currency: stripe.String(string(stripe.CurrencyUSD)),
 					ProductData: &stripe.CheckoutSessionLineItemPriceDataProductDataParams{
 						Name:        stripe.String(item.Name),
-						Description: stripe.String(item.Desc),
+						Description: desc,
 						Metadata:    metadata,
 					},
 					UnitAmount: &unit,
@@ -168,6 +189,39 @@ func CreateSession(db *gorm.DB) gin.HandlerFunc {
 		}
 
 		fee := int64(float64(total) * 0.06)
+
+		metadata := map[string]string{"type": cart.Type}
+		var discount *stripe.Coupon
+
+		if cart.UseGiftCard != "" {
+			var gift types.GiftCard
+			db.Find(&gift, "id = ? AND status = 'success'", cart.UseGiftCard)
+
+			if gift.Balance > 0 {
+				metadata["giftcard"] = cart.UseGiftCard
+
+				amount := int64(gift.Balance * 100)
+				if amount > fee+total {
+					amount = fee + total
+				}
+
+				metadata["giftamount"] = strconv.Itoa(int(amount))
+				discount, err = coupon.New(&stripe.CouponParams{
+					Name:      stripe.String("Gift Certificate"),
+					AmountOff: &amount,
+					Currency:  stripe.String(string(stripe.CurrencyUSD)),
+					Duration:  stripe.String("once"),
+				})
+				if err != nil {
+					log.Println(err)
+				}
+
+				params.Discounts = []*stripe.CheckoutSessionDiscountParams{
+					{Coupon: &discount.ID},
+				}
+			}
+		}
+
 		if fee > 0 {
 			params.LineItems = append(params.LineItems, &stripe.CheckoutSessionLineItemParams{
 				Quantity: stripe.Int64(1),
@@ -190,7 +244,7 @@ func CreateSession(db *gorm.DB) gin.HandlerFunc {
 			// ApplicationFeeAmount: stripe.Int64(int64(float64(total) * 0.02)),
 			Description: stripe.String(desc),
 			OnBehalfOf:  stripe.String(c.GetString("stripe_acct")),
-			Metadata:    map[string]string{"type": cart.Type},
+			Metadata:    metadata,
 		}
 
 		// params.SetStripeAccount(c.GetString("stripe_acct"))
@@ -426,6 +480,12 @@ func StripeWebhook(db *gorm.DB) gin.HandlerFunc {
 				Name:      paymentIntent.Customer.Name,
 				Status:    string(paymentIntent.Status),
 			})
+
+			if gift, ok := paymentIntent.Metadata["giftcard"]; ok {
+				amount, _ := strconv.Atoi(paymentIntent.Metadata["amount"])
+
+				db.Model(&types.GiftCard{}).Where("id = ?", gift).UpdateColumn("balance", gorm.Expr("balance - ?", float64(amount)/100.0))
+			}
 
 			err := sendCustomerEmail(apiKey, c.Request.Host, &conf, &paymentIntent)
 			if err != nil {

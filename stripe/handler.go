@@ -9,11 +9,11 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/jinzhu/gorm"
-	"github.com/stripe/stripe-go/v71"
-	"github.com/stripe/stripe-go/v71/paymentintent"
-	"github.com/stripe/stripe-go/v71/refund"
-	"github.com/stripe/stripe-go/v71/reversal"
-	"github.com/stripe/stripe-go/v71/transfer"
+	"github.com/stripe/stripe-go/v72"
+	"github.com/stripe/stripe-go/v72/paymentintent"
+	"github.com/stripe/stripe-go/v72/refund"
+	"github.com/stripe/stripe-go/v72/reversal"
+	"github.com/stripe/stripe-go/v72/transfer"
 	"github.com/zeroshade/tmsapi/types"
 )
 

@@ -15,9 +15,9 @@ type TransferReq struct {
 }
 
 type GiftCard struct {
-	ID        string `gorm:"primary_key"`
-	Initial   string `gorm:"type:money"`
-	Balance   float64
-	PaymentID string
-	Status    string
+	ID        string  `json:"id" gorm:"primary_key"`
+	Initial   string  `json:"initial" gorm:"type:money"`
+	Balance   float64 `json:"balance"`
+	PaymentID string  `json:"-"`
+	Status    string  `json:"-"`
 }
