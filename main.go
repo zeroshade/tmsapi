@@ -90,7 +90,7 @@ func main() {
 		&types.Transaction{}, &types.Payment{}, &types.Sale{}, &types.PayerInfo{}, &types.WebHookEvent{}, &types.Item{}, &types.SandboxInfo{},
 		&types.CheckoutOrder{}, &types.Payer{}, &types.PurchaseItem{}, &types.PurchaseUnit{}, &types.Capture{}, &types.MerchantConfig{},
 		&ManualOverride{}, &types.Refund{}, &Boat{}, &types.LogAction{}, &stripe.PaymentIntent{}, &stripe.LineItem{}, &types.TransferReq{},
-		&types.GiftCard{})
+		&types.GiftCard{}, &stripe.ManualPayerInfo{})
 	db.Model(&types.Schedule{}).Association("TimeArray")
 	db.Model(&types.Schedule{}).Association("NotAvail")
 	db.Model(&types.Payment{}).Association("Payer.PayerInfo")

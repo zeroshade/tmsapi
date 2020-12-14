@@ -25,6 +25,7 @@ func addTicketRoutes(router *gin.RouterGroup, db *gorm.DB) {
 	router.POST("/passes", GetPasses(db))
 	router.POST("/refund", checkJWT(), logActionMiddle(db), RefundTickets(db))
 	router.POST("/transfer", checkJWT(), logActionMiddle(db), TransferTickets(db))
+	router.POST("/tickets/manual", checkJWT(), logActionMiddle(db), ManualEntry(db))
 }
 
 // TicketCategory holds the name of a price type and the mapping of
@@ -118,7 +119,8 @@ type PaymentHandler interface {
 	GetSoldTickets(config *types.MerchantConfig, db *gorm.DB, from, to string) (interface{}, error)
 	GetPassItems(conf *types.MerchantConfig, db *gorm.DB, id string) ([]types.PassItem, string)
 	RefundTickets(config *types.MerchantConfig, db *gorm.DB, data json.RawMessage) (interface{}, error)
-	TransferTickets(conig *types.MerchantConfig, db *gorm.DB, data []types.TransferReq) (interface{}, error)
+	TransferTickets(config *types.MerchantConfig, db *gorm.DB, data []types.TransferReq) (interface{}, error)
+	ManualEntry(config *types.MerchantConfig, db *gorm.DB, entry types.Manual) (interface{}, error)
 }
 
 func OrdersTimestamp(db *gorm.DB) gin.HandlerFunc {
@@ -328,6 +330,35 @@ func TransferTickets(db *gorm.DB) gin.HandlerFunc {
 		}
 
 		ret, err := handler.TransferTickets(&config, db, data)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+
+		c.JSON(http.StatusOK, ret)
+	}
+}
+
+func ManualEntry(db *gorm.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		var entry types.Manual
+		if err := c.ShouldBindJSON(&entry); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+
+		var config types.MerchantConfig
+		db.Find(&config, "id = ?", c.Param("merchantid"))
+
+		var handler PaymentHandler
+		switch config.PaymentType {
+		case "paypal":
+			handler = &paypal.Handler{}
+		case "stripe":
+			handler = &stripe.Handler{}
+		}
+
+		ret, err := handler.ManualEntry(&config, db, entry)
 		if err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 			return

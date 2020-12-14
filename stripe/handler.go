@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 	"github.com/jinzhu/gorm"
 	"github.com/stripe/stripe-go/v72"
 	"github.com/stripe/stripe-go/v72/paymentintent"
@@ -46,11 +47,12 @@ func (h Handler) OrdersTimestamp(config *types.MerchantConfig, db *gorm.DB, time
 	db.Table("line_items AS li").
 		Joins("LEFT JOIN payment_intents AS pi ON (pi.id = li.payment_id)").
 		Joins("LEFT JOIN transfer_reqs AS tr ON (li.id = tr.line_item_id)").
+		Joins("LEFT JOIN manual_payer_infos AS mpi ON (li.id = mpi.id)").
 		Where("li.acct = ? AND SUBSTRING(coalesce(new_sku, sku) FROM '\\d+[A-Z]+(\\d{10})\\d*') = ?", config.StripeKey, timestamp).
 		Select([]string{"li.id", "payment_id", "li.acct", "quantity",
 			"coalesce(new_sku, sku) as sku",
-			"coalesce(new_name, li.name) AS prod",
-			"pi.name", "pi.email", "created_at",
+			"coalesce(new_name, li.name) AS prod", "mpi.phone",
+			"coalesce(pi.name, mpi.name) AS name", "coalesce(pi.email, mpi.email) AS email", "created_at",
 			"coalesce(li.status, pi.status) AS status", "sku AS orig_sku", "li.name AS orig_prod"}).
 		Scan(&ret)
 
@@ -63,6 +65,11 @@ func (h Handler) OrdersTimestamp(config *types.MerchantConfig, db *gorm.DB, time
 			cus *stripe.Customer
 			ok  bool
 		)
+
+		if r.Status == "manual entry" {
+			continue
+		}
+
 		if cus, ok = piCustomerMap[r.PaymentID]; !ok {
 			pi, err := paymentintent.Get(r.PaymentID, params)
 			if err != nil {
@@ -228,5 +235,34 @@ func (h Handler) TransferTickets(conig *types.MerchantConfig, db *gorm.DB, data 
 	for idx := range data {
 		db.Save(&data[idx])
 	}
+	return nil, nil
+}
+
+type ManualPayerInfo struct {
+	ID    string `gorm:"primary_key"`
+	Name  string
+	Phone string
+	Email string
+}
+
+func (h Handler) ManualEntry(config *types.MerchantConfig, db *gorm.DB, entry types.Manual) (interface{}, error) {
+	li := &LineItem{
+		ID:        uuid.New().String(),
+		PaymentID: "-",
+		Acct:      config.StripeKey,
+		Quantity:  entry.Quantity,
+		Status:    "manual entry",
+		Name:      entry.Desc,
+		Sku:       fmt.Sprintf("%dMANUAL%s", entry.ProductID, entry.Timestamp),
+	}
+
+	db.Create(li)
+	db.Create(&ManualPayerInfo{
+		ID:    li.ID,
+		Name:  entry.Name,
+		Phone: entry.Phone,
+		Email: entry.Email,
+	})
+
 	return nil, nil
 }

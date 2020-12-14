@@ -117,3 +117,7 @@ func (h Handler) GetPassItems(conf *types.MerchantConfig, db *gorm.DB, id string
 	}
 	return ret, name
 }
+
+func (h Handler) ManualEntry(config *types.MerchantConfig, db *gorm.DB, entry types.Manual) (interface{}, error) {
+	return nil, errors.New("not implemented")
+}

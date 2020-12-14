@@ -21,3 +21,13 @@ type GiftCard struct {
 	PaymentID string  `json:"-"`
 	Status    string  `json:"-"`
 }
+
+type Manual struct {
+	ProductID int    `json:"productId"`
+	Timestamp string `json:"timestamp"`
+	Quantity  int    `json:"quantity"`
+	Desc      string `json:"desc"`
+	Name      string `json:"name"`
+	Email     string `json:"email"`
+	Phone     string `json:"phone"`
+}
