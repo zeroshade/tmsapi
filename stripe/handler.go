@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"os"
 	"strconv"
 	"time"
 
@@ -16,6 +17,7 @@ import (
 	"github.com/stripe/stripe-go/v72/refund"
 	"github.com/stripe/stripe-go/v72/reversal"
 	"github.com/stripe/stripe-go/v72/transfer"
+	"github.com/zeroshade/tmsapi/internal"
 	"github.com/zeroshade/tmsapi/types"
 )
 
@@ -277,6 +279,8 @@ type TicketRedemption struct {
 }
 
 func (h Handler) RedeemTickets(config *types.MerchantConfig, db *gorm.DB, data json.RawMessage) (interface{}, error) {
+	apiKey := os.Getenv("SENDGRID_API_KEY")
+
 	var redeem TicketRedemption
 	json.Unmarshal(data, &redeem)
 
@@ -294,6 +298,8 @@ func (h Handler) RedeemTickets(config *types.MerchantConfig, db *gorm.DB, data j
 		return nil, errors.New("cannot redeem for no items")
 	}
 
+	var notifyList []notifyItem
+
 	for _, item := range redeem.Items {
 		li := &LineItem{
 			ID:        uuid.New().String(),
@@ -306,6 +312,9 @@ func (h Handler) RedeemTickets(config *types.MerchantConfig, db *gorm.DB, data j
 			UnitPrice: fmt.Sprintf("%.02f", item.UnitAmount.Value),
 			Amount:    fmt.Sprintf("%.02f", float32(item.Quantity)*item.UnitAmount.Value),
 		}
+
+		notifyList = append(notifyList, notifyItem{Name: li.Name, Quantity: li.Quantity})
+
 		db.Create(li)
 		db.Create(&ManualPayerInfo{
 			ID:    li.ID,
@@ -316,6 +325,23 @@ func (h Handler) RedeemTickets(config *types.MerchantConfig, db *gorm.DB, data j
 	}
 
 	db.Model(&gc).Where("id = ?", gc.ID).Update("status", "used")
+	sendNotifyEmail(apiKey, config, &stripe.PaymentIntent{
+		Charges: &stripe.ChargeList{
+			Data: []*stripe.Charge{
+				{
+					BillingDetails: &stripe.BillingDetails{
+						Name:  redeem.Name,
+						Email: redeem.Email,
+					},
+				},
+			},
+		},
+	}, notifyList)
+
+	if config.SendSMS {
+		t := internal.NewTwilio(config.TwilioAcctSID, config.TwilioAcctToken, config.TwilioFromNumber)
+		t.Send(config.NotifyNumber, "Tickets Purchased by "+redeem.Name)
+	}
 
 	return nil, nil
 }

@@ -562,44 +562,49 @@ func StripeWebhook(db *gorm.DB) gin.HandlerFunc {
 				})
 			}
 
-			fmt.Printf("Total %d, Primary: %d, Secondary: %d\n", pm.Amount, primary, secondary)
-			if giftcardAmount > 0 {
-				fmt.Printf("Gift Card Used: %d", giftcardAmount)
+			typ, ok := pm.Metadata["type"]
+			if !ok || typ != "giftcards" {
+
+				fmt.Printf("Total %d, Primary: %d, Secondary: %d\n", pm.Amount, primary, secondary)
+				if giftcardAmount > 0 {
+					fmt.Printf("Gift Card Used: %d", giftcardAmount)
+				}
+
+				transferParams := &stripe.TransferParams{}
+				// transferParams.SourceTransaction = &pm.Charges.Data[0].ID
+				transferParams.Currency = stripe.String(string(stripe.CurrencyUSD))
+				transferParams.Destination = &conf.StripeKey
+				transferParams.Amount = stripe.Int64(primary)
+				t, err := transfer.New(transferParams)
+				if err != nil {
+					c.JSON(http.StatusFailedDependency, gin.H{"error": err.Error()})
+					return
+				}
+				fmt.Println("Primary Transfer:", t.ID, t.Amount)
+
+				transferParams.Destination = &conf.StripeSecondary
+				transferParams.Amount = stripe.Int64(secondary)
+				t, err = transfer.New(transferParams)
+				if err != nil {
+					c.JSON(http.StatusFailedDependency, gin.H{"error": err.Error()})
+					return
+				}
+
+				log.Println("Secondary Transfer:", t.ID, t.Amount)
+
+				stripeFee := int64(math.Ceil(float64(pm.Amount)*0.029)) + 30
+				feeTransfer := pm.Amount - stripeFee + int64(giftcardAmount) - primary - secondary
+				transferParams.Amount = &feeTransfer
+				transferParams.Destination = stripe.String(conf.StripeAcctMap.Map["feeacct"].String)
+
+				t, err = transfer.New(transferParams)
+				if err != nil {
+					c.JSON(http.StatusFailedDependency, gin.H{"error": err.Error()})
+					return
+				}
+				log.Println("Fee Transfer:", t.ID, t.Amount)
+
 			}
-
-			transferParams := &stripe.TransferParams{}
-			// transferParams.SourceTransaction = &pm.Charges.Data[0].ID
-			transferParams.Currency = stripe.String(string(stripe.CurrencyUSD))
-			transferParams.Destination = &conf.StripeKey
-			transferParams.Amount = stripe.Int64(primary)
-			t, err := transfer.New(transferParams)
-			if err != nil {
-				c.JSON(http.StatusFailedDependency, gin.H{"error": err.Error()})
-				return
-			}
-			fmt.Println("Primary Transfer:", t.ID, t.Amount)
-
-			transferParams.Destination = &conf.StripeSecondary
-			transferParams.Amount = stripe.Int64(secondary)
-			t, err = transfer.New(transferParams)
-			if err != nil {
-				c.JSON(http.StatusFailedDependency, gin.H{"error": err.Error()})
-				return
-			}
-
-			log.Println("Secondary Transfer:", t.ID, t.Amount)
-
-			stripeFee := int64(math.Ceil(float64(pm.Amount)*0.029)) + 30
-			feeTransfer := pm.Amount - stripeFee + int64(giftcardAmount) - primary - secondary
-			transferParams.Amount = &feeTransfer
-			transferParams.Destination = stripe.String(conf.StripeAcctMap.Map["feeacct"].String)
-
-			t, err = transfer.New(transferParams)
-			if err != nil {
-				c.JSON(http.StatusFailedDependency, gin.H{"error": err.Error()})
-				return
-			}
-			log.Println("Fee Transfer:", t.ID, t.Amount)
 
 			if err := sendNotifyEmail(apiKey, &conf, pm, itemList); err != nil {
 				c.JSON(http.StatusFailedDependency, gin.H{"error": err.Error()})
