@@ -1,8 +1,8 @@
-// +heroku goVersion go1.14
+// +heroku goVersion go1.15
 
 module github.com/zeroshade/tmsapi
 
-go 1.14
+go 1.15
 
 require (
 	github.com/auth0-community/go-auth0 v1.0.0
