@@ -26,6 +26,7 @@ func addTicketRoutes(router *gin.RouterGroup, db *gorm.DB) {
 	router.POST("/refund", checkJWT(), logActionMiddle(db), RefundTickets(db))
 	router.POST("/transfer", checkJWT(), logActionMiddle(db), TransferTickets(db))
 	router.POST("/tickets/manual", checkJWT(), logActionMiddle(db), ManualEntry(db))
+	router.POST("/tickets/redeem", RedeemTickets(db))
 }
 
 // TicketCategory holds the name of a price type and the mapping of
@@ -121,6 +122,7 @@ type PaymentHandler interface {
 	RefundTickets(config *types.MerchantConfig, db *gorm.DB, data json.RawMessage) (interface{}, error)
 	TransferTickets(config *types.MerchantConfig, db *gorm.DB, data []types.TransferReq) (interface{}, error)
 	ManualEntry(config *types.MerchantConfig, db *gorm.DB, entry types.Manual) (interface{}, error)
+	RedeemTickets(config *types.MerchantConfig, db *gorm.DB, data json.RawMessage) (interface{}, error)
 }
 
 func OrdersTimestamp(db *gorm.DB) gin.HandlerFunc {
@@ -359,6 +361,35 @@ func ManualEntry(db *gorm.DB) gin.HandlerFunc {
 		}
 
 		ret, err := handler.ManualEntry(&config, db, entry)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+
+		c.JSON(http.StatusOK, ret)
+	}
+}
+
+func RedeemTickets(db *gorm.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		var data json.RawMessage
+		if err := c.ShouldBindJSON(&data); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+
+		var config types.MerchantConfig
+		db.Find(&config, "id = ?", c.Param("merchantid"))
+
+		var handler PaymentHandler
+		switch config.PaymentType {
+		case "paypal":
+			handler = &paypal.Handler{}
+		case "stripe":
+			handler = &stripe.Handler{}
+		}
+
+		ret, err := handler.RedeemTickets(&config, db, data)
 		if err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 			return

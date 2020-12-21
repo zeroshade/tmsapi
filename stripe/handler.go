@@ -2,6 +2,7 @@ package stripe
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"strconv"
@@ -263,6 +264,58 @@ func (h Handler) ManualEntry(config *types.MerchantConfig, db *gorm.DB, entry ty
 		Phone: entry.Phone,
 		Email: entry.Email,
 	})
+
+	return nil, nil
+}
+
+type TicketRedemption struct {
+	GiftCard string `json:"giftcard"`
+	Items    []Item `json:"items"`
+	Name     string `json:"name"`
+	Email    string `json:"email"`
+	Phone    string `json:"phone"`
+}
+
+func (h Handler) RedeemTickets(config *types.MerchantConfig, db *gorm.DB, data json.RawMessage) (interface{}, error) {
+	var redeem TicketRedemption
+	json.Unmarshal(data, &redeem)
+
+	var gc types.GiftCard
+	db.Find(&gc, "id = ?", redeem.GiftCard)
+	if gc.Status != "success" {
+		return nil, errors.New("Invalid Gift Card")
+	}
+
+	if redeem.Name == "" || redeem.Email == "" || redeem.Phone == "" {
+		return nil, errors.New("must include necessary info")
+	}
+
+	if len(redeem.Items) == 0 {
+		return nil, errors.New("cannot redeem for no items")
+	}
+
+	for _, item := range redeem.Items {
+		li := &LineItem{
+			ID:        uuid.New().String(),
+			PaymentID: "-",
+			Acct:      config.StripeKey,
+			Quantity:  item.Quantity,
+			Status:    "success",
+			Name:      item.Name,
+			Sku:       item.Sku,
+			UnitPrice: fmt.Sprintf("%.02f", item.UnitAmount.Value),
+			Amount:    fmt.Sprintf("%.02f", float32(item.Quantity)*item.UnitAmount.Value),
+		}
+		db.Create(li)
+		db.Create(&ManualPayerInfo{
+			ID:    li.ID,
+			Name:  redeem.Name,
+			Phone: redeem.Phone,
+			Email: redeem.Email,
+		})
+	}
+
+	db.Model(&gc).Where("id = ?", gc.ID).Update("status", "used")
 
 	return nil, nil
 }

@@ -18,6 +18,10 @@ func init() {
 
 type Handler struct{}
 
+func (h Handler) RedeemTickets(config *types.MerchantConfig, db *gorm.DB, data json.RawMessage) (interface{}, error) {
+	return nil, errors.New("Not Implemented")
+}
+
 func (h Handler) RefundTickets(*types.MerchantConfig, *gorm.DB, json.RawMessage) (interface{}, error) {
 	return nil, errors.New("Not implemented")
 }

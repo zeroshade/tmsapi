@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"html/template"
 	"log"
+	"math"
 	"net/http"
 	"os"
 	"strconv"
@@ -147,7 +148,36 @@ func CreateSession(db *gorm.DB) gin.HandlerFunc {
 			LineItems:          []*stripe.CheckoutSessionLineItemParams{},
 		}
 
+		metadata := map[string]string{"type": cart.Type}
+		var discount *stripe.Coupon
+
+		if cart.UseGiftCard != "" {
+			var gift types.GiftCard
+			db.Find(&gift, "id = ? AND status = 'success'", cart.UseGiftCard)
+
+			if gift.Balance > 0 {
+				metadata["giftcard"] = cart.UseGiftCard
+
+				amount := int64(gift.Balance * 100)
+				metadata["amount"] = strconv.Itoa(int(amount))
+				discount, err = coupon.New(&stripe.CouponParams{
+					Name:      stripe.String("Gift Certificate"),
+					AmountOff: &amount,
+					Currency:  stripe.String(string(stripe.CurrencyUSD)),
+					Duration:  stripe.String("once"),
+				})
+				if err != nil {
+					log.Println(err)
+				}
+
+				params.Discounts = []*stripe.CheckoutSessionDiscountParams{
+					{Coupon: &discount.ID},
+				}
+			}
+		}
+
 		var giftCards []*types.GiftCard
+
 		total := int64(0)
 		for _, item := range cart.Items {
 			unit := int64(item.UnitAmount.Value * 100)
@@ -156,15 +186,11 @@ func CreateSession(db *gorm.DB) gin.HandlerFunc {
 
 			metadata := map[string]string{"sku": item.Sku}
 			if strings.HasPrefix(item.Sku, "GIFT") {
-				if giftCards == nil {
-					giftCards = make([]*types.GiftCard, 0)
-				}
-
-				for i := int64(0); i < quant; i++ {
+				for i := 0; i < item.Quantity; i++ {
 					giftCards = append(giftCards, &types.GiftCard{
 						ID:      shortuuid.New(),
-						Initial: fmt.Sprintf("%0.2f", float64(unit)/100.0),
-						Balance: float64(unit) / 100.0,
+						Initial: fmt.Sprintf("%.02f", item.UnitAmount.Value),
+						Balance: float64(item.UnitAmount.Value),
 						Status:  "pending",
 					})
 				}
@@ -188,39 +214,10 @@ func CreateSession(db *gorm.DB) gin.HandlerFunc {
 			})
 		}
 
-		fee := int64(float64(total) * 0.06)
-
-		metadata := map[string]string{"type": cart.Type}
-		var discount *stripe.Coupon
-
-		if cart.UseGiftCard != "" {
-			var gift types.GiftCard
-			db.Find(&gift, "id = ? AND status = 'success'", cart.UseGiftCard)
-
-			if gift.Balance > 0 {
-				metadata["giftcard"] = cart.UseGiftCard
-
-				amount := int64(gift.Balance * 100)
-				if amount > fee+total {
-					amount = fee + total
-				}
-
-				metadata["giftamount"] = strconv.Itoa(int(amount))
-				discount, err = coupon.New(&stripe.CouponParams{
-					Name:      stripe.String("Gift Certificate"),
-					AmountOff: &amount,
-					Currency:  stripe.String(string(stripe.CurrencyUSD)),
-					Duration:  stripe.String("once"),
-				})
-				if err != nil {
-					log.Println(err)
-				}
-
-				params.Discounts = []*stripe.CheckoutSessionDiscountParams{
-					{Coupon: &discount.ID},
-				}
-			}
+		if discount != nil {
+			total -= discount.AmountOff
 		}
+		fee := int64(float64(total) * 0.06)
 
 		if fee > 0 {
 			params.LineItems = append(params.LineItems, &stripe.CheckoutSessionLineItemParams{
@@ -449,7 +446,7 @@ func StripeWebhook(db *gorm.DB) gin.HandlerFunc {
 			return
 		}
 
-		fmt.Println(event.Type)
+		fmt.Println(event.Type, event.ID)
 
 		switch event.Type {
 		case "payment_intent.succeeded":
@@ -485,6 +482,7 @@ func StripeWebhook(db *gorm.DB) gin.HandlerFunc {
 				amount, _ := strconv.Atoi(paymentIntent.Metadata["amount"])
 
 				db.Model(&types.GiftCard{}).Where("id = ?", gift).UpdateColumn("balance", gorm.Expr("balance - ?", float64(amount)/100.0))
+				db.Model(&types.GiftCard{}).Where("id = ?", gift).Update("status", "used")
 			}
 
 			err := sendCustomerEmail(apiKey, c.Request.Host, &conf, &paymentIntent)
@@ -527,6 +525,11 @@ func StripeWebhook(db *gorm.DB) gin.HandlerFunc {
 			primary := int64(0)
 			secondary := int64(0)
 
+			var giftcardAmount int
+			if _, ok := pm.Metadata["giftcard"]; ok {
+				giftcardAmount, _ = strconv.Atoi(pm.Metadata["amount"])
+			}
+
 			params := &stripe.CheckoutSessionListLineItemsParams{}
 			params.AddExpand("data.price")
 			params.AddExpand("data.price.product")
@@ -542,7 +545,7 @@ func StripeWebhook(db *gorm.DB) gin.HandlerFunc {
 
 				if li.Price.Product.Name != feeItemName {
 					s := li.Quantity * 500
-					primary += li.AmountTotal - s
+					primary += (li.Price.UnitAmount * li.Quantity) - s
 					secondary += s
 				}
 
@@ -553,16 +556,19 @@ func StripeWebhook(db *gorm.DB) gin.HandlerFunc {
 					Quantity:  int(li.Quantity),
 					Name:      li.Price.Product.Name,
 					Sku:       li.Price.Product.Metadata["sku"],
-					Amount:    fmt.Sprintf("%0.2f", float64(li.AmountTotal)/100.0),
+					Amount:    fmt.Sprintf("%0.2f", float64(li.Price.UnitAmount*li.Quantity)/100.0),
 					UnitPrice: fmt.Sprintf("%0.2f", float64(li.Price.UnitAmount)/100.0),
 					Status:    string(pm.Status),
 				})
 			}
 
 			fmt.Printf("Total %d, Primary: %d, Secondary: %d\n", pm.Amount, primary, secondary)
+			if giftcardAmount > 0 {
+				fmt.Printf("Gift Card Used: %d", giftcardAmount)
+			}
 
 			transferParams := &stripe.TransferParams{}
-			transferParams.SourceTransaction = &pm.Charges.Data[0].ID
+			// transferParams.SourceTransaction = &pm.Charges.Data[0].ID
 			transferParams.Currency = stripe.String(string(stripe.CurrencyUSD))
 			transferParams.Destination = &conf.StripeKey
 			transferParams.Amount = stripe.Int64(primary)
@@ -582,6 +588,18 @@ func StripeWebhook(db *gorm.DB) gin.HandlerFunc {
 			}
 
 			log.Println("Secondary Transfer:", t.ID, t.Amount)
+
+			stripeFee := int64(math.Ceil(float64(pm.Amount)*0.029)) + 30
+			feeTransfer := pm.Amount - stripeFee + int64(giftcardAmount) - primary - secondary
+			transferParams.Amount = &feeTransfer
+			transferParams.Destination = stripe.String(conf.StripeAcctMap.Map["feeacct"].String)
+
+			t, err = transfer.New(transferParams)
+			if err != nil {
+				c.JSON(http.StatusFailedDependency, gin.H{"error": err.Error()})
+				return
+			}
+			log.Println("Fee Transfer:", t.ID, t.Amount)
 
 			if err := sendNotifyEmail(apiKey, &conf, pm, itemList); err != nil {
 				c.JSON(http.StatusFailedDependency, gin.H{"error": err.Error()})
