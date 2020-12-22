@@ -562,9 +562,10 @@ func StripeWebhook(db *gorm.DB) gin.HandlerFunc {
 				})
 			}
 
+			stripeFee := int64(math.Ceil(float64(pm.Amount)*0.029)) + 30
+
 			typ, ok := pm.Metadata["type"]
 			if !ok || typ != "giftcards" {
-
 				fmt.Printf("Total %d, Primary: %d, Secondary: %d\n", pm.Amount, primary, secondary)
 				if giftcardAmount > 0 {
 					fmt.Printf("Gift Card Used: %d", giftcardAmount)
@@ -592,8 +593,8 @@ func StripeWebhook(db *gorm.DB) gin.HandlerFunc {
 
 				log.Println("Secondary Transfer:", t.ID, t.Amount)
 
-				stripeFee := int64(math.Ceil(float64(pm.Amount)*0.029)) + 30
 				feeTransfer := pm.Amount - stripeFee + int64(giftcardAmount) - primary - secondary
+				transferParams.SourceTransaction = &pm.Charges.Data[0].ID
 				transferParams.Amount = &feeTransfer
 				transferParams.Destination = stripe.String(conf.StripeAcctMap.Map["feeacct"].String)
 
@@ -603,7 +604,14 @@ func StripeWebhook(db *gorm.DB) gin.HandlerFunc {
 					return
 				}
 				log.Println("Fee Transfer:", t.ID, t.Amount)
-
+			} else if typ == "giftcards" {
+				feeTransfer := pm.Amount - stripeFee - primary - secondary
+				transferParams := &stripe.TransferParams{}
+				transferParams.SourceTransaction = &pm.Charges.Data[0].ID
+				transferParams.Amount = &feeTransfer
+				transferParams.Destination = stripe.String(conf.StripeAcctMap.Map["feeacct"].String)
+				t, err := transfer.New(transferParams)
+				log.Println("Fee Transfer: ", t.ID, t.Amount, err)
 			}
 
 			if err := sendNotifyEmail(apiKey, &conf, pm, itemList); err != nil {
