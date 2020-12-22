@@ -12,6 +12,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/gin-gonic/gin"
 	"github.com/jinzhu/gorm"
@@ -160,12 +161,17 @@ func CreateSession(db *gorm.DB) gin.HandlerFunc {
 
 				amount := int64(gift.Balance * 100)
 				metadata["amount"] = strconv.Itoa(int(amount))
-				discount, err = coupon.New(&stripe.CouponParams{
-					Name:      stripe.String("Gift Certificate"),
-					AmountOff: &amount,
-					Currency:  stripe.String(string(stripe.CurrencyUSD)),
-					Duration:  stripe.String("once"),
-				})
+
+				couponParams := &stripe.CouponParams{
+					Name:           stripe.String("Gift Certificate"),
+					AmountOff:      &amount,
+					Currency:       stripe.String(string(stripe.CurrencyUSD)),
+					Duration:       stripe.String("once"),
+					MaxRedemptions: stripe.Int64(1),
+				}
+				couponParams.Metadata = map[string]string{"giftid": cart.UseGiftCard}
+				discount, err = coupon.New(couponParams)
+
 				if err != nil {
 					log.Println(err)
 				}
@@ -424,6 +430,19 @@ func sendGiftCardEmail(apiKey string, giftCards []types.GiftCard, conf *types.Me
 	return nil
 }
 
+func getTransfer(acct string, transfers map[string]*stripe.TransferParams) *stripe.TransferParams {
+	t, ok := transfers[acct]
+	if !ok {
+		t = &stripe.TransferParams{
+			Destination: stripe.String(acct),
+			Currency:    stripe.String(string(stripe.CurrencyUSD)),
+			Amount:      stripe.Int64(0),
+		}
+		transfers[acct] = t
+	}
+	return t
+}
+
 type LineItem struct {
 	ID        string `json:"id" gorm:"primary_key"`
 	PaymentID string `json:"paymentId" gorm:"primary_key"`
@@ -522,8 +541,7 @@ func StripeWebhook(db *gorm.DB) gin.HandlerFunc {
 			db.Find(&conf, "stripe_key = ?", pm.OnBehalfOf.ID)
 
 			itemList := make([]notifyItem, 0)
-			primary := int64(0)
-			secondary := int64(0)
+			transfers := make(map[string]*stripe.TransferParams)
 
 			var giftcardAmount int
 			if _, ok := pm.Metadata["giftcard"]; ok {
@@ -543,10 +561,32 @@ func StripeWebhook(db *gorm.DB) gin.HandlerFunc {
 					Quantity: int(li.Quantity),
 				})
 
-				if li.Price.Product.Name != feeItemName {
-					s := li.Quantity * 500
-					primary += (li.Price.UnitAmount * li.Quantity) - s
-					secondary += s
+				sku := li.Price.Product.Metadata["sku"]
+
+				if !strings.HasPrefix(sku, "GIFT") && li.Price.Product.Name != feeItemName {
+					pid, _ := strconv.Atoi(sku[:strings.IndexFunc(sku, func(c rune) bool { return !unicode.IsNumber(c) })])
+
+					var prod types.Product
+					db.Find(&prod, "id = ?", pid)
+
+					tinfo := strings.Split(conf.StripeAcctMap.Map[strconv.Itoa(int(prod.BoatID))].String, "|")
+					if len(tinfo) == 3 {
+						amt, _ := strconv.Atoi(tinfo[0])
+						pri := tinfo[1]
+						sec := tinfo[2]
+
+						pt := getTransfer(pri, transfers)
+						ps := getTransfer(sec, transfers)
+
+						amt *= 100
+						s := li.Quantity * int64(amt)
+
+						*pt.Amount += (li.Price.UnitAmount * li.Quantity) - s
+						*ps.Amount += s
+					} else if len(tinfo) == 1 {
+						t := getTransfer(tinfo[0], transfers)
+						*t.Amount += (li.Price.UnitAmount * li.Quantity)
+					}
 				}
 
 				db.Save(&LineItem{
@@ -555,7 +595,7 @@ func StripeWebhook(db *gorm.DB) gin.HandlerFunc {
 					Acct:      conf.StripeKey,
 					Quantity:  int(li.Quantity),
 					Name:      li.Price.Product.Name,
-					Sku:       li.Price.Product.Metadata["sku"],
+					Sku:       sku,
 					Amount:    fmt.Sprintf("%0.2f", float64(li.Price.UnitAmount*li.Quantity)/100.0),
 					UnitPrice: fmt.Sprintf("%0.2f", float64(li.Price.UnitAmount)/100.0),
 					Status:    string(pm.Status),
@@ -563,55 +603,32 @@ func StripeWebhook(db *gorm.DB) gin.HandlerFunc {
 			}
 
 			stripeFee := int64(math.Ceil(float64(pm.Amount)*0.029)) + 30
-
-			typ, ok := pm.Metadata["type"]
-			if !ok || typ != "giftcards" {
-				fmt.Printf("Total %d, Primary: %d, Secondary: %d\n", pm.Amount, primary, secondary)
-				if giftcardAmount > 0 {
-					fmt.Printf("Gift Card Used: %d", giftcardAmount)
+			amtTransferred := int64(0)
+			for _, v := range transfers {
+				if giftcardAmount == 0 {
+					v.SourceTransaction = &pm.Charges.Data[0].ID
+				} else {
+					v.TransferGroup = &pm.ID
 				}
+				t, err := transfer.New(v)
+				if err != nil {
+					c.JSON(http.StatusFailedDependency, gin.H{"error": err.Error()})
+					return
+				}
+				fmt.Println("Transfer:", t.ID, t.Amount, t.Destination)
+				amtTransferred += t.Amount
+			}
 
-				transferParams := &stripe.TransferParams{}
-				// transferParams.SourceTransaction = &pm.Charges.Data[0].ID
-				transferParams.Currency = stripe.String(string(stripe.CurrencyUSD))
-				transferParams.Destination = &conf.StripeKey
-				transferParams.Amount = stripe.Int64(primary)
+			feeTransfer := pm.Amount + int64(giftcardAmount) - amtTransferred - stripeFee
+			if feeTransfer > 0 {
+				transferParams := &stripe.TransferParams{
+					Destination:       stripe.String(conf.StripeAcctMap.Map["feeacct"].String),
+					SourceTransaction: &pm.Charges.Data[0].ID,
+					Amount:            &feeTransfer,
+					Currency:          stripe.String(string(stripe.CurrencyUSD)),
+				}
 				t, err := transfer.New(transferParams)
-				if err != nil {
-					c.JSON(http.StatusFailedDependency, gin.H{"error": err.Error()})
-					return
-				}
-				fmt.Println("Primary Transfer:", t.ID, t.Amount)
-
-				transferParams.Destination = &conf.StripeSecondary
-				transferParams.Amount = stripe.Int64(secondary)
-				t, err = transfer.New(transferParams)
-				if err != nil {
-					c.JSON(http.StatusFailedDependency, gin.H{"error": err.Error()})
-					return
-				}
-
-				log.Println("Secondary Transfer:", t.ID, t.Amount)
-
-				feeTransfer := pm.Amount - stripeFee + int64(giftcardAmount) - primary - secondary
-				transferParams.SourceTransaction = &pm.Charges.Data[0].ID
-				transferParams.Amount = &feeTransfer
-				transferParams.Destination = stripe.String(conf.StripeAcctMap.Map["feeacct"].String)
-
-				t, err = transfer.New(transferParams)
-				if err != nil {
-					c.JSON(http.StatusFailedDependency, gin.H{"error": err.Error()})
-					return
-				}
-				log.Println("Fee Transfer:", t.ID, t.Amount)
-			} else if typ == "giftcards" {
-				feeTransfer := pm.Amount - stripeFee - primary - secondary
-				transferParams := &stripe.TransferParams{}
-				transferParams.SourceTransaction = &pm.Charges.Data[0].ID
-				transferParams.Amount = &feeTransfer
-				transferParams.Destination = stripe.String(conf.StripeAcctMap.Map["feeacct"].String)
-				t, err := transfer.New(transferParams)
-				log.Println("Fee Transfer: ", t.ID, t.Amount, err)
+				log.Println("fee transfer:", t.ID, t.Amount, err)
 			}
 
 			if err := sendNotifyEmail(apiKey, &conf, pm, itemList); err != nil {

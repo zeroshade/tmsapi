@@ -59,7 +59,7 @@ func (h Handler) OrdersTimestamp(config *types.MerchantConfig, db *gorm.DB, time
 			"coalesce(li.status, pi.status) AS status", "sku AS orig_sku", "li.name AS orig_prod"}).
 		Scan(&ret)
 
-	piCustomerMap := make(map[string]*stripe.Customer)
+	piMap := make(map[string]*stripe.PaymentIntent)
 	params := &stripe.PaymentIntentParams{}
 	params.AddExpand("customer")
 	for idx := range ret {
@@ -69,18 +69,28 @@ func (h Handler) OrdersTimestamp(config *types.MerchantConfig, db *gorm.DB, time
 			ok  bool
 		)
 
-		if r.Status == "manual entry" {
+		if r.Status == "manual entry" || r.PaymentID == "-" {
 			continue
 		}
 
-		if cus, ok = piCustomerMap[r.PaymentID]; !ok {
-			pi, err := paymentintent.Get(r.PaymentID, params)
+		pi, ok := piMap[r.PaymentID]
+		if !ok {
+			var err error
+			pi, err = paymentintent.Get(r.PaymentID, params)
 			if err != nil {
 				log.Println("PI:", err)
 				continue
 			}
-			cus = pi.Customer
-			piCustomerMap[r.PaymentID] = cus
+			piMap[r.PaymentID] = pi
+		}
+
+		if r.CreatedAt.IsZero() {
+			r.CreatedAt = time.Unix(pi.Created, 0)
+		}
+
+		cus = pi.Customer
+		if card, ok := pi.Metadata["giftcard"]; ok && card != "" {
+			r.PaymentID = "-"
 		}
 
 		if cus.Email != "" {
@@ -150,6 +160,8 @@ func (h Handler) RefundTickets(config *types.MerchantConfig, db *gorm.DB, data j
 			fmt.Println(err)
 		}
 
+		feeAcct := config.StripeAcctMap.Map["feeacct"].String
+
 		iter := transfer.List(&stripe.TransferListParams{TransferGroup: &pi.TransferGroup})
 		for iter.Next() {
 			acctID := iter.Transfer().Destination.ID
@@ -164,6 +176,8 @@ func (h Handler) RefundTickets(config *types.MerchantConfig, db *gorm.DB, data j
 			case config.StripeSecondary:
 				reverseAmount = int64(item.Quantity * 500)
 				// fmt.Println("Refund:", item.Quantity*500, acctID)
+			case feeAcct:
+				continue
 			}
 
 			rev, err := reversal.New(&stripe.ReversalParams{

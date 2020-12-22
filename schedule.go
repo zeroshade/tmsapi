@@ -34,7 +34,7 @@ type ManualOverride struct {
 func getOverrideRange(db *gorm.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var ret []ManualOverride
-		merchantProds := db.Model(Product{}).Where("merchant_id = ? AND id = product_id", c.Param("merchantid")).Select("1").SubQuery()
+		merchantProds := db.Model(types.Product{}).Where("merchant_id = ? AND id = product_id", c.Param("merchantid")).Select("1").SubQuery()
 
 		db.Model(ManualOverride{}).
 			Where("DATE(time) BETWEEN ? AND ? AND EXISTS ?", c.Param("from"), c.Param("to"), merchantProds).

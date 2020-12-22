@@ -86,10 +86,10 @@ func main() {
 		log.Fatal(err)
 	}
 	defer db.Close()
-	db.AutoMigrate(&Product{}, &types.Schedule{}, &types.ScheduleTime{}, &TicketCategory{}, &Report{},
+	db.AutoMigrate(&types.Product{}, &types.Schedule{}, &types.ScheduleTime{}, &TicketCategory{}, &Report{},
 		&types.Transaction{}, &types.Payment{}, &types.Sale{}, &types.PayerInfo{}, &types.WebHookEvent{}, &types.Item{}, &types.SandboxInfo{},
 		&types.CheckoutOrder{}, &types.Payer{}, &types.PurchaseItem{}, &types.PurchaseUnit{}, &types.Capture{}, &types.MerchantConfig{},
-		&ManualOverride{}, &types.Refund{}, &Boat{}, &types.LogAction{}, &stripe.PaymentIntent{}, &stripe.LineItem{}, &types.TransferReq{},
+		&ManualOverride{}, &types.Refund{}, &types.Boat{}, &types.LogAction{}, &stripe.PaymentIntent{}, &stripe.LineItem{}, &types.TransferReq{},
 		&types.GiftCard{}, &stripe.ManualPayerInfo{})
 	db.Model(&types.Schedule{}).Association("TimeArray")
 	db.Model(&types.Schedule{}).Association("NotAvail")

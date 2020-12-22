@@ -24,7 +24,7 @@ const spaceBetween = 15
 
 var skuRe = regexp.MustCompile(`(\d+)([A-Z]+)(\d{10})\d*`)
 
-func drawPass(f *gofpdf.Fpdf, item types.PassItem, passTitle string, boat *Boat, name, tkt, qrname string) {
+func drawPass(f *gofpdf.Fpdf, item types.PassItem, passTitle string, boat *types.Boat, name, tkt, qrname string) {
 	var opt gofpdf.ImageOptions
 	opt.ImageType = "png"
 
@@ -99,9 +99,9 @@ func generatePdf(db *gorm.DB, items []types.PassItem, passTitle, name string, w 
 
 		pid := skuPieces[0][1]
 
-		var prod Product
+		var prod types.Product
 		db.Find(&prod, "id = ?", pid)
-		var boat Boat
+		var boat types.Boat
 		db.Find(&boat, "id = ?", prod.BoatID)
 
 		prod.Boat = &boat
