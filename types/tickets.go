@@ -23,11 +23,13 @@ type GiftCard struct {
 }
 
 type Manual struct {
-	ProductID int    `json:"productId"`
-	Timestamp string `json:"timestamp"`
-	Quantity  int    `json:"quantity"`
-	Desc      string `json:"desc"`
-	Name      string `json:"name"`
-	Email     string `json:"email"`
-	Phone     string `json:"phone"`
+	ProductID  int    `json:"productId"`
+	Timestamp  string `json:"timestamp"`
+	EntryType  string `json:"entry"`
+	TicketType string `json:"ticket"`
+	Quantity   int    `json:"quantity"`
+	Desc       string `json:"desc"`
+	Name       string `json:"name"`
+	Email      string `json:"email"`
+	Phone      string `json:"phone"`
 }

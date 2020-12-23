@@ -7,6 +7,7 @@ import (
 	"log"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -69,7 +70,7 @@ func (h Handler) OrdersTimestamp(config *types.MerchantConfig, db *gorm.DB, time
 			ok  bool
 		)
 
-		if r.Status == "manual entry" || r.PaymentID == "-" {
+		if strings.HasPrefix(r.Status, "manual entry") || r.PaymentID == "-" {
 			continue
 		}
 
@@ -268,9 +269,9 @@ func (h Handler) ManualEntry(config *types.MerchantConfig, db *gorm.DB, entry ty
 		PaymentID: "-",
 		Acct:      config.StripeKey,
 		Quantity:  entry.Quantity,
-		Status:    "manual entry",
+		Status:    "manual entry - " + entry.EntryType,
 		Name:      entry.Desc,
-		Sku:       fmt.Sprintf("%dMANUAL%s", entry.ProductID, entry.Timestamp),
+		Sku:       fmt.Sprintf("%d%s%s", entry.ProductID, strings.ToUpper(entry.TicketType), entry.Timestamp),
 	}
 
 	db.Create(li)
