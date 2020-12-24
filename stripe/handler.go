@@ -229,7 +229,7 @@ func (h Handler) GetPassItems(config *types.MerchantConfig, db *gorm.DB, id stri
 	db.Table("line_items AS li").
 		Joins("left join transfer_reqs AS tr ON (li.id = tr.line_item_id)").
 		Where("payment_id = ? AND coalesce(new_sku, sku) != ''", id).
-		Select([]string{"payment_id", "id", "quantity", "coalesce(new_sku, sku)", "coalesce(new_name, name)", "amount",
+		Select([]string{"payment_id", "id", "quantity", "coalesce(new_sku, sku) AS sku", "coalesce(new_name, name)", "amount",
 			`SUBSTRING(name from '\w* Ticket, [^,]*, (.*)') as description`}).
 		Scan(&items)
 
