@@ -9,6 +9,7 @@ import (
 	"math"
 	"net/http"
 	"os"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -455,6 +456,18 @@ type LineItem struct {
 	Status    string `json:"status"`
 }
 
+func (li *LineItem) AfterCreate(tx *gorm.DB) error {
+	re := regexp.MustCompile(`(\d+)[A-Z]+(\d{10})`)
+	res := re.FindStringSubmatch(li.Sku)
+	pid, _ := strconv.Atoi(res[1])
+	timestamp, _ := strconv.ParseInt(res[2], 10, 64)
+
+	tm := time.Unix(timestamp, 0).In(timeloc)
+	tx.Table("manual_overrides").Where("product_id = ? AND time = ?", pid, tm).
+		UpdateColumn("avail", gorm.Expr("avail - ?", li.Quantity))
+	return nil
+}
+
 func StripeWebhook(db *gorm.DB) gin.HandlerFunc {
 	apiKey := os.Getenv("SENDGRID_API_KEY")
 
@@ -552,6 +565,7 @@ func StripeWebhook(db *gorm.DB) gin.HandlerFunc {
 			params.AddExpand("data.price")
 			params.AddExpand("data.price.product")
 			// params.SetStripeAccount(event.Account)
+
 			i := session.ListLineItems(sess.ID, params)
 			for i.Next() {
 				li := i.LineItem()
@@ -589,7 +603,7 @@ func StripeWebhook(db *gorm.DB) gin.HandlerFunc {
 					}
 				}
 
-				db.Save(&LineItem{
+				db.Create(&LineItem{
 					ID:        li.ID,
 					PaymentID: sess.PaymentIntent.ID,
 					Acct:      conf.StripeKey,
