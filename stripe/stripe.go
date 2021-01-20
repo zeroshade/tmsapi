@@ -456,18 +456,6 @@ type LineItem struct {
 	Status    string `json:"status"`
 }
 
-func (li *LineItem) AfterCreate(tx *gorm.DB) error {
-	re := regexp.MustCompile(`(\d+)[A-Z]+(\d{10})`)
-	res := re.FindStringSubmatch(li.Sku)
-	pid, _ := strconv.Atoi(res[1])
-	timestamp, _ := strconv.ParseInt(res[2], 10, 64)
-
-	tm := time.Unix(timestamp, 0).In(timeloc)
-	tx.Table("manual_overrides").Where("product_id = ? AND time = ?", pid, tm).
-		UpdateColumn("avail", gorm.Expr("avail - ?", li.Quantity))
-	return nil
-}
-
 func StripeWebhook(db *gorm.DB) gin.HandlerFunc {
 	apiKey := os.Getenv("SENDGRID_API_KEY")
 
@@ -603,7 +591,7 @@ func StripeWebhook(db *gorm.DB) gin.HandlerFunc {
 					}
 				}
 
-				db.Create(&LineItem{
+				db.Save(&LineItem{
 					ID:        li.ID,
 					PaymentID: sess.PaymentIntent.ID,
 					Acct:      conf.StripeKey,
@@ -614,6 +602,15 @@ func StripeWebhook(db *gorm.DB) gin.HandlerFunc {
 					UnitPrice: fmt.Sprintf("%0.2f", float64(li.Price.UnitAmount)/100.0),
 					Status:    string(pm.Status),
 				})
+
+				re := regexp.MustCompile(`(\d+)[A-Z]+(\d{10})`)
+				res := re.FindStringSubmatch(sku)
+				pid, _ := strconv.Atoi(res[1])
+				timestamp, _ := strconv.ParseInt(res[2], 10, 64)
+
+				tm := time.Unix(timestamp, 0).In(timeloc)
+				db.Table("manual_overrides").Where("product_id = ? AND time = ?", pid, tm).
+					UpdateColumn("avail", gorm.Expr("avail - ?", li.Quantity))
 			}
 
 			stripeFee := int64(math.Ceil(float64(pm.Amount)*0.029)) + 30
