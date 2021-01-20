@@ -603,14 +603,16 @@ func StripeWebhook(db *gorm.DB) gin.HandlerFunc {
 					Status:    string(pm.Status),
 				})
 
-				re := regexp.MustCompile(`(\d+)[A-Z]+(\d{10})`)
-				res := re.FindStringSubmatch(sku)
-				pid, _ := strconv.Atoi(res[1])
-				timestamp, _ := strconv.ParseInt(res[2], 10, 64)
+				if li.Price.Product.Name != feeItemName {
+					re := regexp.MustCompile(`(\d+)[A-Z]+(\d{10})`)
+					res := re.FindStringSubmatch(sku)
+					pid, _ := strconv.Atoi(res[1])
+					timestamp, _ := strconv.ParseInt(res[2], 10, 64)
 
-				tm := time.Unix(timestamp, 0).In(timeloc)
-				db.Table("manual_overrides").Where("product_id = ? AND time = ?", pid, tm).
-					UpdateColumn("avail", gorm.Expr("avail - ?", li.Quantity))
+					tm := time.Unix(timestamp, 0).In(timeloc)
+					db.Table("manual_overrides").Where("product_id = ? AND time = ?", pid, tm).
+						UpdateColumn("avail", gorm.Expr("avail - ?", li.Quantity))
+				}
 			}
 
 			stripeFee := int64(math.Ceil(float64(pm.Amount)*0.029)) + 30
@@ -659,7 +661,26 @@ func StripeWebhook(db *gorm.DB) gin.HandlerFunc {
 				return
 			}
 
-			db.Model(&PaymentIntent{}).Where("id = ?", charge.PaymentIntent.ID).UpdateColumn("status", "refunded")
+			db.Model(&PaymentIntent{}).
+				Where("id = ?", charge.PaymentIntent.ID).
+				UpdateColumn("status", "refunded")
+
+			type pidfind struct {
+				Quantity int `gorm:"quantity"`
+				Pid      int `gorm:"pid"`
+				Tm       int `gorm:"tm"`
+			}
+			var values []pidfind
+
+			db.Table("line_items").
+				Where("payment_id = ? AND name != 'Fees'", charge.PaymentIntent.ID).
+				Select("quantity", `(REGEXP_MATCHES(sku, '(\d+)[A-Z]+(\d{10})\d*'))[1]::INTEGER as pid`, `(REGEXP_MATCHES(sku, '(\d+)[A-Z]+(\d{10})\d*'))[2]::INTEGER as tm`).Scan(&values)
+
+			for _, v := range values {
+				db.Table("manual_overrides").
+					Where("product_id = ? AND TO_TIMESTAMP(?) = time", v.Pid, v.Tm).
+					Update("avail", gorm.Expr("avail - ?", v.Quantity))
+			}
 		}
 
 		c.Status(http.StatusOK)
