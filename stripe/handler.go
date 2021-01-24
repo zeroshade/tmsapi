@@ -285,7 +285,7 @@ func (h Handler) ManualEntry(config *types.MerchantConfig, db *gorm.DB, entry ty
 	pid := entry.ProductID
 	timestamp := entry.Timestamp
 
-	db.Table("manual_overrides").Where("product_id = ? AND time = ?", pid, timestamp).
+	db.Table("manual_overrides").Where("product_id = ? AND time = TO_TIMESTAMP(?::INTEGER)", pid, timestamp).
 		UpdateColumn("avail", gorm.Expr("avail - ?", li.Quantity))
 
 	return nil, nil
