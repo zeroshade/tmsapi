@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -249,8 +250,32 @@ func (h Handler) GetPassItems(config *types.MerchantConfig, db *gorm.DB, id stri
 	return ret, name
 }
 
-func (h Handler) TransferTickets(conig *types.MerchantConfig, db *gorm.DB, data []types.TransferReq) (interface{}, error) {
+func (h Handler) TransferTickets(_ *types.MerchantConfig, db *gorm.DB, data []types.TransferReq) (interface{}, error) {
 	for idx := range data {
+		type req struct {
+			Quantity int
+			Sku      string
+		}
+		var r req
+		db.Table("line_items AS li").
+			Joins("left join transfer_reqs AS tr ON (li.id = tr.line_item_id)").
+			Where("li.id = ?", data[idx].LineItemID).
+			Select("li.quantity", "coalesce(new_sku, sku) AS sku").Scan(&r)
+
+		re := regexp.MustCompile(`(\d+)[A-Z]+(\d{10})`)
+		result := re.FindStringSubmatch(r.Sku)
+		oldPid, _ := strconv.Atoi(result[1])
+		oldTm, _ := strconv.ParseInt(result[2], 10, 64)
+
+		result = re.FindStringSubmatch(data[idx].NewSKU)
+		newPid, _ := strconv.Atoi(result[1])
+		newTm, _ := strconv.ParseInt(result[2], 10, 64)
+		db.Table("manual_overrides").Where("product_id = ? AND time = TO_TIMESTAMP(?::INTEGER)", oldPid, oldTm).
+			UpdateColumn("avail", gorm.Expr("avail - ?", r.Quantity))
+
+		db.Table("manual_overrides").Where("product_id = ? AND time = TO_TIMESTAMP(?::INTEGER)", newPid, newTm).
+			UpdateColumn("avail", gorm.Expr("avail + ?", r.Quantity))
+
 		db.Save(&data[idx])
 	}
 	return nil, nil
