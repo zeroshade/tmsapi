@@ -260,7 +260,7 @@ func (h Handler) TransferTickets(_ *types.MerchantConfig, db *gorm.DB, data []ty
 		db.Debug().Table("line_items AS li").
 			Joins("left join transfer_reqs AS tr ON (li.id = tr.line_item_id)").
 			Where("li.id = ?", data[idx].LineItemID).
-			Select("quantity", "coalesce(new_sku, sku) AS sku").Scan(&r)
+			Select("quantity, coalesce(new_sku, sku) AS sku").Scan(&r)
 
 		fmt.Println(r)
 		re := regexp.MustCompile(`(\d+)[A-Z]+(\d{10})`)
