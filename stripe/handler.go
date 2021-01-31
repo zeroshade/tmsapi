@@ -274,10 +274,10 @@ func (h Handler) TransferTickets(_ *types.MerchantConfig, db *gorm.DB, data []ty
 		newPid, _ := strconv.Atoi(result[1])
 		newTm, _ := strconv.ParseInt(result[2], 10, 64)
 		db.Debug().Table("manual_overrides").Where("product_id = ? AND time = TO_TIMESTAMP(?::INTEGER)", oldPid, oldTm).
-			UpdateColumn("avail", gorm.Expr("avail - ?", r[0].Quantity))
+			UpdateColumn("avail", gorm.Expr("avail + ?", r[0].Quantity))
 
 		db.Debug().Table("manual_overrides").Where("product_id = ? AND time = TO_TIMESTAMP(?::INTEGER)", newPid, newTm).
-			UpdateColumn("avail", gorm.Expr("avail + ?", r[0].Quantity))
+			UpdateColumn("avail", gorm.Expr("avail - ?", r[0].Quantity))
 
 		db.Save(&data[idx])
 	}
