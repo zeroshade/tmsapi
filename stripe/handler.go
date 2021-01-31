@@ -256,14 +256,14 @@ func (h Handler) TransferTickets(_ *types.MerchantConfig, db *gorm.DB, data []ty
 			Quantity int
 			Sku      string
 		}
-		var r req
+		var r []req
 		db.Table("line_items AS li").
 			Joins("left join transfer_reqs AS tr ON (li.id = tr.line_item_id)").
 			Where("li.id = ?", data[idx].LineItemID).
 			Select("li.quantity", "coalesce(new_sku, sku) AS sku").Scan(&r)
 
 		re := regexp.MustCompile(`(\d+)[A-Z]+(\d{10})`)
-		result := re.FindStringSubmatch(r.Sku)
+		result := re.FindStringSubmatch(r[0].Sku)
 		oldPid, _ := strconv.Atoi(result[1])
 		oldTm, _ := strconv.ParseInt(result[2], 10, 64)
 
@@ -271,10 +271,10 @@ func (h Handler) TransferTickets(_ *types.MerchantConfig, db *gorm.DB, data []ty
 		newPid, _ := strconv.Atoi(result[1])
 		newTm, _ := strconv.ParseInt(result[2], 10, 64)
 		db.Table("manual_overrides").Where("product_id = ? AND time = TO_TIMESTAMP(?::INTEGER)", oldPid, oldTm).
-			UpdateColumn("avail", gorm.Expr("avail - ?", r.Quantity))
+			UpdateColumn("avail", gorm.Expr("avail - ?", r[0].Quantity))
 
 		db.Table("manual_overrides").Where("product_id = ? AND time = TO_TIMESTAMP(?::INTEGER)", newPid, newTm).
-			UpdateColumn("avail", gorm.Expr("avail + ?", r.Quantity))
+			UpdateColumn("avail", gorm.Expr("avail + ?", r[0].Quantity))
 
 		db.Save(&data[idx])
 	}
