@@ -121,7 +121,7 @@ func (h Handler) GetSoldTickets(config *types.MerchantConfig, db *gorm.DB, from,
 	db.Table("line_items AS li").
 		Joins("LEFT JOIN transfer_reqs AS tr ON (li.id = tr.line_item_id)").
 		Select(`(regexp_matches(coalesce(new_sku, sku), '^\d+'))[1]::integer as pid, `+fromSku+` as stamp, SUM(quantity) AS qty`).
-		Where("acct = ? AND status = 'succeeded' AND "+fromSku+" BETWEEN TO_TIMESTAMP(?) AND TO_TIMESTAMP(?)",
+		Where("acct = ? AND (status = 'succeeded' OR status like 'manual%') AND "+fromSku+" BETWEEN TO_TIMESTAMP(?) AND TO_TIMESTAMP(?)",
 			config.StripeKey, from, to).
 		Group("pid, stamp").
 		Scan(&out)
@@ -273,10 +273,10 @@ func (h Handler) TransferTickets(_ *types.MerchantConfig, db *gorm.DB, data []ty
 		fmt.Println(result)
 		newPid, _ := strconv.Atoi(result[1])
 		newTm, _ := strconv.ParseInt(result[2], 10, 64)
-		db.Table("manual_overrides").Where("product_id = ? AND time = TO_TIMESTAMP(?::INTEGER)", oldPid, oldTm).
+		db.Debug().Table("manual_overrides").Where("product_id = ? AND time = TO_TIMESTAMP(?::INTEGER)", oldPid, oldTm).
 			UpdateColumn("avail", gorm.Expr("avail - ?", r[0].Quantity))
 
-		db.Table("manual_overrides").Where("product_id = ? AND time = TO_TIMESTAMP(?::INTEGER)", newPid, newTm).
+		db.Debug().Table("manual_overrides").Where("product_id = ? AND time = TO_TIMESTAMP(?::INTEGER)", newPid, newTm).
 			UpdateColumn("avail", gorm.Expr("avail + ?", r[0].Quantity))
 
 		db.Save(&data[idx])
