@@ -88,8 +88,16 @@ func GetSession(db *gorm.DB) gin.HandlerFunc {
 		params.AddExpand("payment_intent.charges")
 		params.AddExpand("payment_intent.payment_method")
 		params.AddExpand("line_items")
+		// params.AddExpand("payment_intent.customer")
 		// params.SetStripeAccount(c.GetString("stripe_acct"))
-		session, err := session.Get(c.Param("stripe_session"), params)
+
+		key := stripe.Key
+		sk := c.GetString("stripe_acct")
+		if !strings.HasPrefix(sk, "acct_") {
+			key = sk
+		}
+		sess := session.Client{B: stripe.GetBackend(stripe.APIBackend), Key: key}
+		session, err := sess.Get(c.Param("stripe_session"), params)
 		if err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 			return
@@ -115,11 +123,20 @@ func CreateSession(db *gorm.DB) gin.HandlerFunc {
 		var cus *stripe.Customer
 		var err error
 
-		iter := customer.List(&stripe.CustomerListParams{Email: &cart.Email})
+		key := stripe.Key
+		sk := c.GetString("stripe_acct")
+		isSubAcct := strings.HasPrefix(sk, "acct_")
+		if !isSubAcct {
+			key = sk
+		}
+
+		cusClient := customer.Client{B: stripe.GetBackend(stripe.APIBackend), Key: key}
+
+		iter := cusClient.List(&stripe.CustomerListParams{Email: &cart.Email})
 		if iter.Next() {
 			cus = iter.Customer()
 			if cus.Phone == "" {
-				cus, err = customer.Update(cus.ID, &stripe.CustomerParams{
+				cus, err = cusClient.Update(cus.ID, &stripe.CustomerParams{
 					Name:  &cus.Name,
 					Email: &cus.Email,
 					Phone: &cart.Phone,
@@ -130,7 +147,7 @@ func CreateSession(db *gorm.DB) gin.HandlerFunc {
 			}
 		} else {
 
-			cus, err = customer.New(&stripe.CustomerParams{
+			cus, err = cusClient.New(&stripe.CustomerParams{
 				Name:  &cart.Name,
 				Email: &cart.Email,
 				Phone: &cart.Phone,
@@ -226,7 +243,7 @@ func CreateSession(db *gorm.DB) gin.HandlerFunc {
 		}
 		fee := int64(float64(total) * 0.06)
 
-		if fee > 0 {
+		if isSubAcct && fee > 0 {
 			params.LineItems = append(params.LineItems, &stripe.CheckoutSessionLineItemParams{
 				Quantity: stripe.Int64(1),
 				PriceData: &stripe.CheckoutSessionLineItemPriceDataParams{
@@ -247,24 +264,31 @@ func CreateSession(db *gorm.DB) gin.HandlerFunc {
 		params.PaymentIntentData = &stripe.CheckoutSessionPaymentIntentDataParams{
 			// ApplicationFeeAmount: stripe.Int64(int64(float64(total) * 0.02)),
 			Description: stripe.String(desc),
-			OnBehalfOf:  stripe.String(c.GetString("stripe_acct")),
 			Metadata:    metadata,
 		}
 
-		// params.SetStripeAccount(c.GetString("stripe_acct"))
+		if isSubAcct {
+			params.PaymentIntentData.OnBehalfOf = stripe.String(c.GetString("stripe_acct"))
+		}
 
-		sess, err := session.New(params)
+		// params.SetStripeAccount(c.GetString("stripe_acct"))
+		sessClient := session.Client{B: stripe.GetBackend(stripe.APIBackend), Key: key}
+		sess, err := sessClient.New(params)
 		if err != nil {
 			c.JSON(http.StatusFailedDependency, gin.H{"error": err.Error()})
 			return
 		}
 
-		if giftCards != nil {
-			for _, c := range giftCards {
-				c.PaymentID = sess.PaymentIntent.ID
-				db.Create(c)
-			}
+		for _, c := range giftCards {
+			c.PaymentID = sess.PaymentIntent.ID
+			db.Create(c)
 		}
+
+		db.Save(&PaymentIntent{
+			ID:   sess.PaymentIntent.ID,
+			Acct: c.GetString("stripe_acct"),
+		})
+
 		data := createCheckoutSessionResponse{SessionID: sess.ID}
 		c.JSON(http.StatusOK, data)
 	}
@@ -477,11 +501,16 @@ func StripeWebhook(db *gorm.DB) gin.HandlerFunc {
 			}
 
 			var conf types.MerchantConfig
-			db.Find(&conf, "stripe_key = ?", paymentIntent.OnBehalfOf.ID)
+			db.Find(&conf, "stripe_key = (SELECT acct FROM payment_intents WHERE id = ?)", paymentIntent.ID)
 
+			key := stripe.Key
+			if !strings.HasPrefix(conf.StripeKey, "acct_") {
+				key = conf.StripeKey
+			}
 			// details := paymentIntent.Charges.Data[0].BillingDetails
 			if paymentIntent.Customer.Name == "" {
-				cus, err := customer.Get(paymentIntent.Customer.ID, &stripe.CustomerParams{})
+				custClient := customer.Client{B: stripe.GetBackend(stripe.APIBackend), Key: key}
+				cus, err := custClient.Get(paymentIntent.Customer.ID, &stripe.CustomerParams{})
 				if err != nil {
 					log.Println("Customer Fetch Error:", err)
 				}
@@ -533,13 +562,27 @@ func StripeWebhook(db *gorm.DB) gin.HandlerFunc {
 			paymentParams.AddExpand("charges")
 			paymentParams.AddExpand("payment_method")
 			// paymentParams.SetStripeAccount(event.Account)
-			pm, err := paymentintent.Get(sess.PaymentIntent.ID, paymentParams)
+
+			var pi PaymentIntent
+			db.Find(&pi, "id = ?", sess.PaymentIntent.ID)
+
+			var conf types.MerchantConfig
+			db.Find(&conf, "stripe_key = ?", pi.Acct)
+
+			key := stripe.Key
+			if !strings.HasPrefix(pi.Acct, "acct_") {
+				key = pi.Acct
+			}
+
+			piClient := paymentintent.Client{B: stripe.GetBackend(stripe.APIBackend), Key: key}
+
+			pm, err := piClient.Get(sess.PaymentIntent.ID, paymentParams)
 			if err != nil {
 				log.Println(err)
 			}
 
-			var conf types.MerchantConfig
-			db.Find(&conf, "stripe_key = ?", pm.OnBehalfOf.ID)
+			// var conf types.MerchantConfig
+			// db.Find(&conf, "stripe_key = ?", pm.OnBehalfOf.ID)
 
 			itemList := make([]notifyItem, 0)
 			transfers := make(map[string]*stripe.TransferParams)
@@ -554,7 +597,8 @@ func StripeWebhook(db *gorm.DB) gin.HandlerFunc {
 			params.AddExpand("data.price.product")
 			// params.SetStripeAccount(event.Account)
 
-			i := session.ListLineItems(sess.ID, params)
+			sessClient := session.Client{B: piClient.B, Key: key}
+			i := sessClient.ListLineItems(sess.ID, params)
 			for i.Next() {
 				li := i.LineItem()
 
@@ -565,7 +609,7 @@ func StripeWebhook(db *gorm.DB) gin.HandlerFunc {
 
 				sku := li.Price.Product.Metadata["sku"]
 
-				if !strings.HasPrefix(sku, "GIFT") && li.Price.Product.Name != feeItemName {
+				if strings.HasPrefix(pi.Acct, "acct_") && !strings.HasPrefix(sku, "GIFT") && li.Price.Product.Name != feeItemName {
 					pid, _ := strconv.Atoi(sku[:strings.IndexFunc(sku, func(c rune) bool { return !unicode.IsNumber(c) })])
 
 					var prod types.Product
@@ -633,7 +677,7 @@ func StripeWebhook(db *gorm.DB) gin.HandlerFunc {
 			}
 
 			feeTransfer := pm.Amount + int64(giftcardAmount) - amtTransferred - stripeFee
-			if feeTransfer > 0 {
+			if strings.HasPrefix(conf.StripeKey, "acct_") && feeTransfer > 0 {
 				transferParams := &stripe.TransferParams{
 					Destination:       stripe.String(conf.StripeAcctMap.Map["feeacct"].String),
 					SourceTransaction: &pm.Charges.Data[0].ID,
