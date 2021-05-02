@@ -27,4 +27,5 @@ type MerchantConfig struct {
 	StripeSecondary  string        `json:"-"`
 	StripeAcctMap    hstore.Hstore `json:"-"`
 	PaymentType      string        `json:"-"`
+	FeePercent       float64       `json:"-"`
 }

@@ -241,9 +241,10 @@ func CreateSession(db *gorm.DB) gin.HandlerFunc {
 		if discount != nil {
 			total -= discount.AmountOff
 		}
-		fee := int64(float64(total) * 0.06)
+		feePct := c.GetFloat64("fee_pct")
+		fee := int64(float64(total) * feePct)
 
-		if isSubAcct && fee > 0 {
+		if fee > 0 {
 			params.LineItems = append(params.LineItems, &stripe.CheckoutSessionLineItemParams{
 				Quantity: stripe.Int64(1),
 				PriceData: &stripe.CheckoutSessionLineItemPriceDataParams{

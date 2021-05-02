@@ -71,6 +71,7 @@ func getStripeAcct(db *gorm.DB) gin.HandlerFunc {
 		db.Find(&conf, "id = ?", c.Param("merchantid"))
 
 		c.Set("stripe_acct", conf.StripeKey)
+		c.Set("fee_pct", conf.FeePercent)
 		c.Next()
 	}
 }
