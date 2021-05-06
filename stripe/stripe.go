@@ -631,8 +631,10 @@ func StripeWebhook(db *gorm.DB) gin.HandlerFunc {
 						*pt.Amount += (li.Price.UnitAmount * li.Quantity) - s
 						*ps.Amount += s
 					} else if len(tinfo) == 1 {
-						t := getTransfer(tinfo[0], transfers)
-						*t.Amount += (li.Price.UnitAmount * li.Quantity)
+						if tinfo[0] != "" {
+							t := getTransfer(tinfo[0], transfers)
+							*t.Amount += (li.Price.UnitAmount * li.Quantity)
+						}
 					}
 				}
 
