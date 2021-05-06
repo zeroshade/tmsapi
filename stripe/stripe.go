@@ -650,7 +650,7 @@ func StripeWebhook(db *gorm.DB) gin.HandlerFunc {
 					Status:    string(pm.Status),
 				})
 
-				if li.Price.Product.Name != feeItemName {
+				if !strings.HasPrefix(sku, "GIFT") && li.Price.Product.Name != feeItemName {
 					re := regexp.MustCompile(`(\d+)[A-Z]+(\d{10})`)
 					res := re.FindStringSubmatch(sku)
 					pid, _ := strconv.Atoi(res[1])
