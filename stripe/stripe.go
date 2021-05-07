@@ -326,7 +326,7 @@ func sendNotifyEmail(apiKey string, conf *types.MerchantConfig, payment *stripe.
 
 	t := template.Must(template.New("notify").Parse(tmpl))
 
-	from := mail.NewEmail("Do Not Reply", "donotreply@websbyjoe.org")
+	from := mail.NewEmail("Fishing Reservation System", "donotreply@fishingreservationsystem.com")
 	to := mail.NewEmail(conf.EmailName, conf.EmailFrom)
 	subject := "Tickets Purchased"
 	var tpl bytes.Buffer
@@ -712,6 +712,10 @@ func StripeWebhook(db *gorm.DB) gin.HandlerFunc {
 				Where("id = ?", charge.PaymentIntent.ID).
 				UpdateColumn("status", "refunded")
 
+			db.Model(&types.GiftCard{}).
+				Where("payment_id = ?", charge.PaymentIntent.ID).
+				UpdateColumn("status", "refunded")
+
 			type pidfind struct {
 				Quantity int `gorm:"quantity"`
 				Pid      int `gorm:"pid"`
@@ -720,7 +724,7 @@ func StripeWebhook(db *gorm.DB) gin.HandlerFunc {
 			var values []pidfind
 
 			db.Table("line_items").
-				Where("payment_id = ? AND name != 'Fees'", charge.PaymentIntent.ID).
+				Where("payment_id = ? AND sku NOT LIKE 'GIFT%' AND name != 'Fees'", charge.PaymentIntent.ID).
 				Select("quantity", `(REGEXP_MATCHES(sku, '(\d+)[A-Z]+(\d{10})\d*'))[1]::INTEGER as pid`, `(REGEXP_MATCHES(sku, '(\d+)[A-Z]+(\d{10})\d*'))[2]::INTEGER as tm`).Scan(&values)
 
 			for _, v := range values {
