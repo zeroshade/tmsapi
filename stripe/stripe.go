@@ -685,6 +685,7 @@ func StripeWebhook(db *gorm.DB) gin.HandlerFunc {
 
 			feeTransfer := feeAmount - stripeFee
 			if strings.HasPrefix(conf.StripeKey, "acct_") && feeTransfer > 0 {
+				log.Println("WTFLOG:", feeAmount, stripeFee)
 				transferParams := &stripe.TransferParams{
 					Destination:       stripe.String(conf.StripeAcctMap.Map["feeacct"].String),
 					SourceTransaction: &pm.Charges.Data[0].ID,
