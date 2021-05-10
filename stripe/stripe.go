@@ -269,7 +269,8 @@ func CreateSession(db *gorm.DB) gin.HandlerFunc {
 		}
 
 		if isSubAcct {
-			params.PaymentIntentData.OnBehalfOf = stripe.String(c.GetString("stripe_acct"))
+			// params.PaymentIntentData.OnBehalfOf = stripe.String(c.GetString("stripe_acct"))
+			params.SetStripeAccount(c.GetString("stripe_acct"))
 		}
 
 		// params.SetStripeAccount(c.GetString("stripe_acct"))
