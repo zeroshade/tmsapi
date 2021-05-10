@@ -598,10 +598,14 @@ func StripeWebhook(db *gorm.DB) gin.HandlerFunc {
 			params.AddExpand("data.price.product")
 			// params.SetStripeAccount(event.Account)
 
+			var feeAmount int64
 			sessClient := session.Client{B: piClient.B, Key: key}
 			i := sessClient.ListLineItems(sess.ID, params)
 			for i.Next() {
 				li := i.LineItem()
+				if li.Price.Product.Name == feeItemName {
+					feeAmount = li.Price.UnitAmount
+				}
 
 				itemList = append(itemList, notifyItem{
 					Name:     li.Price.Product.Name,
@@ -679,7 +683,7 @@ func StripeWebhook(db *gorm.DB) gin.HandlerFunc {
 				amtTransferred += t.Amount
 			}
 
-			feeTransfer := pm.Amount + int64(giftcardAmount) - amtTransferred - stripeFee
+			feeTransfer := feeAmount - stripeFee
 			if strings.HasPrefix(conf.StripeKey, "acct_") && feeTransfer > 0 {
 				transferParams := &stripe.TransferParams{
 					Destination:       stripe.String(conf.StripeAcctMap.Map["feeacct"].String),
