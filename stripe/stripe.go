@@ -281,6 +281,11 @@ func CreateSession(db *gorm.DB) gin.HandlerFunc {
 			Metadata:    metadata,
 		}
 
+		stripeFee := int64(math.Ceil(float64(total+fee)*0.029)) + 30
+		if fee > stripeFee {
+			params.PaymentIntentData.ApplicationFeeAmount = stripe.Int64(fee - stripeFee)
+		}
+
 		if isSubAcct {
 			// params.PaymentIntentData.OnBehalfOf = stripe.String(c.GetString("stripe_acct"))
 			params.SetStripeAccount(c.GetString("stripe_acct"))
@@ -616,14 +621,14 @@ func StripeWebhook(db *gorm.DB) gin.HandlerFunc {
 			params.AddExpand("data.price.product")
 			params.SetStripeAccount(event.Account)
 
-			var feeAmount int64
+			// var feeAmount int64
 			sessClient := session.Client{B: piClient.B, Key: key}
 			i := sessClient.ListLineItems(sess.ID, params)
 			for i.Next() {
 				li := i.LineItem()
-				if li.Price.Product.Name == feeItemName {
-					feeAmount = li.Price.UnitAmount
-				}
+				// if li.Price.Product.Name == feeItemName {
+				// 	feeAmount = li.Price.UnitAmount
+				// }
 
 				itemList = append(itemList, notifyItem{
 					Name:     li.Price.Product.Name,
@@ -684,7 +689,7 @@ func StripeWebhook(db *gorm.DB) gin.HandlerFunc {
 				}
 			}
 
-			stripeFee := int64(math.Ceil(float64(pm.Amount)*0.029)) + 30
+			// stripeFee := int64(math.Ceil(float64(pm.Amount)*0.029)) + 30
 			amtTransferred := int64(0)
 			for _, v := range transfers {
 				if giftcardAmount == 0 {
@@ -701,19 +706,19 @@ func StripeWebhook(db *gorm.DB) gin.HandlerFunc {
 				amtTransferred += t.Amount
 			}
 
-			feeTransfer := feeAmount - stripeFee
-			if strings.HasPrefix(conf.StripeKey, "acct_") && feeTransfer > 0 {
-				log.Println("WTFLOG:", feeAmount, stripeFee)
-				transferParams := &stripe.TransferParams{
-					Destination:       stripe.String(conf.StripeAcctMap.Map["feeacct"].String),
-					SourceTransaction: &pm.Charges.Data[0].ID,
-					Amount:            &feeTransfer,
-					Currency:          stripe.String(string(stripe.CurrencyUSD)),
-				}
-				transferParams.SetStripeAccount(conf.StripeKey)
-				t, err := transfer.New(transferParams)
-				log.Println("fee transfer:", t.ID, t.Amount, err)
-			}
+			// feeTransfer := feeAmount - stripeFee
+			// if strings.HasPrefix(conf.StripeKey, "acct_") && feeTransfer > 0 {
+			// 	log.Println("WTFLOG:", feeAmount, stripeFee)
+			// 	transferParams := &stripe.TransferParams{
+			// 		Destination:       stripe.String(conf.StripeAcctMap.Map["feeacct"].String),
+			// 		SourceTransaction: &pm.Charges.Data[0].ID,
+			// 		Amount:            &feeTransfer,
+			// 		Currency:          stripe.String(string(stripe.CurrencyUSD)),
+			// 	}
+			// 	transferParams.SetStripeAccount(conf.StripeKey)
+			// 	t, err := transfer.New(transferParams)
+			// 	log.Println("fee transfer:", t.ID, t.Amount, err)
+			// }
 
 			if err := sendNotifyEmail(apiKey, &conf, pm, itemList); err != nil {
 				c.JSON(http.StatusFailedDependency, gin.H{"error": err.Error()})
