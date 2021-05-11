@@ -131,27 +131,38 @@ func CreateSession(db *gorm.DB) gin.HandlerFunc {
 		}
 
 		cusClient := customer.Client{B: stripe.GetBackend(stripe.APIBackend), Key: key}
+		cusParams := &stripe.CustomerListParams{Email: &cart.Email}
+		if isSubAcct {
+			cusParams.SetStripeAccount(sk)
+		}
 
-		iter := cusClient.List(&stripe.CustomerListParams{Email: &cart.Email})
+		iter := cusClient.List(cusParams)
 		if iter.Next() {
 			cus = iter.Customer()
 			if cus.Phone == "" {
-				cus, err = cusClient.Update(cus.ID, &stripe.CustomerParams{
+				p := &stripe.CustomerParams{
 					Name:  &cus.Name,
 					Email: &cus.Email,
 					Phone: &cart.Phone,
-				})
+				}
+				if isSubAcct {
+					p.SetStripeAccount(sk)
+				}
+				cus, err = cusClient.Update(cus.ID, p)
 				if err != nil {
 					log.Println("Create customer error:", err)
 				}
 			}
 		} else {
-
-			cus, err = cusClient.New(&stripe.CustomerParams{
+			p := &stripe.CustomerParams{
 				Name:  &cart.Name,
 				Email: &cart.Email,
 				Phone: &cart.Phone,
-			})
+			}
+			if isSubAcct {
+				p.SetStripeAccount(sk)
+			}
+			cus, err = cusClient.New(p)
 			if err != nil {
 				log.Println("Create Customer Error:", err)
 			}
