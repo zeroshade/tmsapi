@@ -523,7 +523,9 @@ func StripeWebhook(db *gorm.DB) gin.HandlerFunc {
 			// details := paymentIntent.Charges.Data[0].BillingDetails
 			if paymentIntent.Customer.Name == "" {
 				custClient := customer.Client{B: stripe.GetBackend(stripe.APIBackend), Key: key}
-				cus, err := custClient.Get(paymentIntent.Customer.ID, &stripe.CustomerParams{})
+				params := &stripe.CustomerParams{}
+				params.SetStripeAccount(conf.StripeKey)
+				cus, err := custClient.Get(paymentIntent.Customer.ID, params)
 				if err != nil {
 					log.Println("Customer Fetch Error:", err)
 				}
@@ -585,6 +587,8 @@ func StripeWebhook(db *gorm.DB) gin.HandlerFunc {
 			key := stripe.Key
 			if !strings.HasPrefix(pi.Acct, "acct_") {
 				key = pi.Acct
+			} else {
+				paymentParams.SetStripeAccount(pi.Acct)
 			}
 
 			piClient := paymentintent.Client{B: stripe.GetBackend(stripe.APIBackend), Key: key}
@@ -608,7 +612,7 @@ func StripeWebhook(db *gorm.DB) gin.HandlerFunc {
 			params := &stripe.CheckoutSessionListLineItemsParams{}
 			params.AddExpand("data.price")
 			params.AddExpand("data.price.product")
-			// params.SetStripeAccount(event.Account)
+			params.SetStripeAccount(event.Account)
 
 			var feeAmount int64
 			sessClient := session.Client{B: piClient.B, Key: key}
