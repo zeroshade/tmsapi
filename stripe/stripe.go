@@ -95,6 +95,8 @@ func GetSession(db *gorm.DB) gin.HandlerFunc {
 		sk := c.GetString("stripe_acct")
 		if !strings.HasPrefix(sk, "acct_") {
 			key = sk
+		} else {
+			params.SetStripeAccount(sk)
 		}
 		sess := session.Client{B: stripe.GetBackend(stripe.APIBackend), Key: key}
 		session, err := sess.Get(c.Param("stripe_session"), params)
