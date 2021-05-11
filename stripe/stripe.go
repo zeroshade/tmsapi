@@ -708,6 +708,7 @@ func StripeWebhook(db *gorm.DB) gin.HandlerFunc {
 					Amount:            &feeTransfer,
 					Currency:          stripe.String(string(stripe.CurrencyUSD)),
 				}
+				transferParams.SetStripeAccount(conf.StripeKey)
 				t, err := transfer.New(transferParams)
 				log.Println("fee transfer:", t.ID, t.Amount, err)
 			}
