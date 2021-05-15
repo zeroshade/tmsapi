@@ -402,7 +402,8 @@ func sendCustomerEmail(apiKey, host string, conf *types.MerchantConfig, payment 
 		subject = "Gift Cards Purchased"
 	}
 
-	from := mail.NewEmail(conf.EmailName, conf.EmailFrom)
+	// from := mail.NewEmail(conf.EmailName, conf.EmailFrom)
+	from := mail.NewEmail(conf.EmailName, "donotreply@fishingreservationsystem.com")
 
 	to := mail.NewEmail(details.Name, details.Email)
 
@@ -452,7 +453,8 @@ func sendGiftCardEmail(apiKey string, giftCards []types.GiftCard, conf *types.Me
 	</table>
 	`
 
-	from := mail.NewEmail(conf.EmailName, conf.EmailFrom)
+	// from := mail.NewEmail(conf.EmailName, conf.EmailFrom)
+	from := mail.NewEmail(conf.EmailName, "donotreply@fishingreservationsystem.com")
 	to := mail.NewEmail(payment.Customer.Name, payment.Customer.Email)
 	subject := "Gift Card Codes"
 	t := template.Must(template.New("codes").Parse(tmpl))
