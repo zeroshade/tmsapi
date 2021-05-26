@@ -61,9 +61,21 @@ func (h Handler) OrdersTimestamp(config *types.MerchantConfig, db *gorm.DB, time
 			"coalesce(li.status, pi.status) AS status", "sku AS orig_sku", "li.name AS orig_prod"}).
 		Scan(&ret)
 
+	key := stripe.Key
+	sk := config.StripeKey
+	isSubAcct := strings.HasPrefix(sk, "acct_")
+	if !isSubAcct {
+		key = sk
+	}
+
+	piClient := paymentintent.Client{B: stripe.GetBackend(stripe.APIBackend), Key: key}
+
 	piMap := make(map[string]*stripe.PaymentIntent)
 	params := &stripe.PaymentIntentParams{}
 	params.AddExpand("customer")
+	if isSubAcct {
+		params.SetStripeAccount(sk)
+	}
 	for idx := range ret {
 		r := &ret[idx]
 		var (
@@ -78,7 +90,7 @@ func (h Handler) OrdersTimestamp(config *types.MerchantConfig, db *gorm.DB, time
 		pi, ok := piMap[r.PaymentID]
 		if !ok {
 			var err error
-			pi, err = paymentintent.Get(r.PaymentID, params)
+			pi, err = piClient.Get(r.PaymentID, params)
 			if err != nil {
 				log.Println("PI:", err)
 				continue
@@ -145,12 +157,23 @@ func (h Handler) RefundTickets(config *types.MerchantConfig, db *gorm.DB, data j
 		return nil, err
 	}
 
+	key := stripe.Key
+	sk := config.StripeKey
+	isSubAcct := strings.HasPrefix(sk, "acct_")
+	if !isSubAcct {
+		key = sk
+	}
+
 	for _, i := range info {
 		var item LineItem
 		db.Find(&item, &LineItem{ID: i.LineItemID, PaymentID: i.PaymentIntentID, Acct: config.StripeKey})
 
 		params := &stripe.PaymentIntentParams{}
-		pi, err := paymentintent.Get(item.PaymentID, params)
+		piClient := paymentintent.Client{B: stripe.GetBackend(stripe.APIBackend), Key: key}
+		if isSubAcct {
+			params.SetStripeAccount(sk)
+		}
+		pi, err := piClient.Get(item.PaymentID, params)
 		if err != nil {
 			return nil, err
 		}
@@ -192,10 +215,16 @@ func (h Handler) RefundTickets(config *types.MerchantConfig, db *gorm.DB, data j
 			fmt.Printf("%+v\n", rev)
 		}
 
-		ref, err := refund.New(&stripe.RefundParams{
+		refparams := &stripe.RefundParams{
 			Amount:        stripe.Int64(int64(amt * 100)),
 			PaymentIntent: &pi.ID,
-		})
+		}
+		refClient := refund.Client{B: stripe.GetBackend(stripe.APIBackend), Key: key}
+		if isSubAcct {
+			refparams.SetStripeAccount(sk)
+		}
+
+		ref, err := refClient.New(refparams)
 		if err != nil {
 			return nil, err
 		}
