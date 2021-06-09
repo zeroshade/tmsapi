@@ -2,6 +2,7 @@ package stripe
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"html/template"
@@ -18,8 +19,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/jinzhu/gorm"
 	"github.com/lithammer/shortuuid/v3"
-	"github.com/sendgrid/sendgrid-go"
-	"github.com/sendgrid/sendgrid-go/helpers/mail"
+	"github.com/mailgun/mailgun-go/v4"
 	"github.com/stripe/stripe-go/v72"
 	"github.com/stripe/stripe-go/v72/checkout/session"
 	"github.com/stripe/stripe-go/v72/coupon"
@@ -330,6 +330,8 @@ type notifyItem struct {
 	Quantity    int
 }
 
+var mailgunPublicKey = os.Getenv("MAILGUN_PUBLIC_KEY")
+
 func sendNotifyEmail(apiKey string, conf *types.MerchantConfig, payment *stripe.PaymentIntent, itemList []notifyItem) error {
 	details := payment.Charges.Data[0].BillingDetails
 
@@ -345,8 +347,10 @@ func sendNotifyEmail(apiKey string, conf *types.MerchantConfig, payment *stripe.
 
 	t := template.Must(template.New("notify").Parse(tmpl))
 
-	from := mail.NewEmail("Fishing Reservation System", "donotreply@fishingreservationsystem.com")
-	to := mail.NewEmail(conf.EmailName, conf.EmailFrom)
+	mg := mailgun.NewMailgun("mg.fishingreservationsystem.com", apiKey)
+
+	// from := mail.NewEmail("Fishing Reservation System", "donotreply@fishingreservationsystem.com")
+	// to := mail.NewEmail(conf.EmailName, conf.EmailFrom)
 	subject := "Tickets Purchased"
 	var tpl bytes.Buffer
 
@@ -357,17 +361,24 @@ func sendNotifyEmail(apiKey string, conf *types.MerchantConfig, payment *stripe.
 		return err
 	}
 
-	content := mail.NewContent("text/html", tpl.String())
-	log.Println("Send Email:", from, subject, to, content)
-	m := mail.NewV3MailInit(from, subject, to, content)
-	request := sendgrid.GetRequest(apiKey, "/v3/mail/send", "https://api.sendgrid.com")
-	request.Method = "POST"
-	request.Body = mail.GetRequestBody(m)
-	_, err := sendgrid.API(request)
-	if err != nil {
-		return err
-	}
-	return nil
+	m := mg.NewMessage("donotreply@fishingreservationsystem.com", subject, tpl.String(), fmt.Sprintf("%s <%s>", conf.EmailName, conf.EmailFrom))
+	m.AddHeader("Content-Type", "text/html")
+
+	resp, id, err := mg.Send(context.Background(), m)
+	log.Println("Send Email: ", subject, conf.EmailName, conf.EmailFrom)
+	log.Println("Response: ", resp, id)
+
+	// content := mail.NewContent("text/html", tpl.String())
+	// log.Println("Send Email:", from, subject, to, content)
+	// m := mail.NewV3MailInit(from, subject, to, content)
+	// request := sendgrid.GetRequest(apiKey, "/v3/mail/send", "https://api.sendgrid.com")
+	// request.Method = "POST"
+	// request.Body = mail.GetRequestBody(m)
+	// _, err := sendgrid.API(request)
+	// if err != nil {
+	// 	return err
+	// }
+	return err
 }
 
 func sendCustomerEmail(apiKey, host string, conf *types.MerchantConfig, payment *stripe.PaymentIntent) error {
@@ -402,10 +413,12 @@ func sendCustomerEmail(apiKey, host string, conf *types.MerchantConfig, payment 
 		subject = "Gift Cards Purchased"
 	}
 
-	// from := mail.NewEmail(conf.EmailName, conf.EmailFrom)
-	from := mail.NewEmail(conf.EmailName, "donotreply@fishingreservationsystem.com")
+	mg := mailgun.NewMailgun("mg.fishingreservationsystem.com", apiKey)
 
-	to := mail.NewEmail(details.Name, details.Email)
+	// from := mail.NewEmail(conf.EmailName, conf.EmailFrom)
+	// from := mail.NewEmail(conf.EmailName, "donotreply@fishingreservationsystem.com")
+
+	// to := mail.NewEmail(details.Name, details.Email)
 
 	t := template.Must(template.New("notify").Parse(tmpl))
 	var tpl bytes.Buffer
@@ -415,17 +428,24 @@ func sendCustomerEmail(apiKey, host string, conf *types.MerchantConfig, payment 
 		return err
 	}
 
-	content := mail.NewContent("text/html", conf.EmailContent+tpl.String())
-	log.Println("Send Email:", from, subject, to, content)
-	m := mail.NewV3MailInit(from, subject, to, content)
-	request := sendgrid.GetRequest(apiKey, "/v3/mail/send", "https://api.sendgrid.com")
-	request.Method = "POST"
-	request.Body = mail.GetRequestBody(m)
-	_, err := sendgrid.API(request)
-	if err != nil {
-		return err
-	}
-	return nil
+	m := mg.NewMessage("donotreply@fishingreservationsystem.com", subject, tpl.String(), fmt.Sprintf("%s <%s>", details.Name, details.Email))
+	m.AddHeader("Content-Type", "text/html")
+
+	resp, id, err := mg.Send(context.Background(), m)
+	log.Println("Send Email: ", subject, details.Name, details.Email)
+	log.Println("Response: ", resp, id)
+
+	// content := mail.NewContent("text/html", conf.EmailContent+tpl.String())
+	// log.Println("Send Email:", from, subject, to, content)
+	// m := mail.NewV3MailInit(from, subject, to, content)
+	// request := sendgrid.GetRequest(apiKey, "/v3/mail/send", "https://api.sendgrid.com")
+	// request.Method = "POST"
+	// request.Body = mail.GetRequestBody(m)
+	// _, err := sendgrid.API(request)
+	// if err != nil {
+	// 	return err
+	// }
+	return err
 }
 
 func sendGiftCardEmail(apiKey string, giftCards []types.GiftCard, conf *types.MerchantConfig, payment *stripe.PaymentIntent) error {
@@ -453,9 +473,11 @@ func sendGiftCardEmail(apiKey string, giftCards []types.GiftCard, conf *types.Me
 	</table>
 	`
 
+	mg := mailgun.NewMailgun("mg.fishingreservationsystem.com", apiKey)
+
 	// from := mail.NewEmail(conf.EmailName, conf.EmailFrom)
-	from := mail.NewEmail(conf.EmailName, "donotreply@fishingreservationsystem.com")
-	to := mail.NewEmail(payment.Customer.Name, payment.Customer.Email)
+	// from := mail.NewEmail(conf.EmailName, "donotreply@fishingreservationsystem.com")
+	// to := mail.NewEmail(payment.Customer.Name, payment.Customer.Email)
 	subject := "Gift Card Codes"
 	t := template.Must(template.New("codes").Parse(tmpl))
 	var tpl bytes.Buffer
@@ -463,18 +485,25 @@ func sendGiftCardEmail(apiKey string, giftCards []types.GiftCard, conf *types.Me
 		return err
 	}
 
-	content := mail.NewContent("text/html", tpl.String())
-	log.Println("Send Email:", from, subject, to, content)
-	m := mail.NewV3MailInit(from, subject, to, content)
-	request := sendgrid.GetRequest(apiKey, "/v3/mail/send", "https://api.sendgrid.com")
-	request.Method = "POST"
-	request.Body = mail.GetRequestBody(m)
-	_, err := sendgrid.API(request)
-	if err != nil {
-		return err
-	}
+	m := mg.NewMessage("donotreply@fishingreservationsystem.com", subject, tpl.String(), fmt.Sprintf("%s <%s>", payment.Customer.Name, payment.Customer.Email))
+	m.AddHeader("Content-Type", "text/html")
 
-	return nil
+	resp, id, err := mg.Send(context.Background(), m)
+	log.Println("Send Email: ", subject, payment.Customer.Name, payment.Customer.Email)
+	log.Println("response: ", resp, id)
+
+	// content := mail.NewContent("text/html", tpl.String())
+	// log.Println("Send Email:", from, subject, to, content)
+	// m := mail.NewV3MailInit(from, subject, to, content)
+	// request := sendgrid.GetRequest(apiKey, "/v3/mail/send", "https://api.sendgrid.com")
+	// request.Method = "POST"
+	// request.Body = mail.GetRequestBody(m)
+	// _, err := sendgrid.API(request)
+	// if err != nil {
+	// 	return err
+	// }
+
+	return err
 }
 
 func getTransfer(acct string, transfers map[string]*stripe.TransferParams) *stripe.TransferParams {
@@ -503,7 +532,7 @@ type LineItem struct {
 }
 
 func StripeWebhook(db *gorm.DB) gin.HandlerFunc {
-	apiKey := os.Getenv("SENDGRID_API_KEY")
+	apiKey := os.Getenv("MAILGUN_API_KEY")
 
 	return func(c *gin.Context) {
 		event := stripe.Event{}
