@@ -362,7 +362,7 @@ func sendNotifyEmail(apiKey string, conf *types.MerchantConfig, payment *stripe.
 	}
 
 	m := mg.NewMessage("donotreply@fishingreservationsystem.com", subject, tpl.String(), fmt.Sprintf("%s <%s>", conf.EmailName, conf.EmailFrom))
-	m.AddHeader("Content-Type", "text/html")
+	m.SetHtml(tpl.String())
 
 	resp, id, err := mg.Send(context.Background(), m)
 	log.Println("Send Email: ", subject, conf.EmailName, conf.EmailFrom)
@@ -429,7 +429,7 @@ func sendCustomerEmail(apiKey, host string, conf *types.MerchantConfig, payment 
 	}
 
 	m := mg.NewMessage("donotreply@fishingreservationsystem.com", subject, tpl.String(), fmt.Sprintf("%s <%s>", details.Name, details.Email))
-	m.AddHeader("Content-Type", "text/html")
+	m.SetHtml(tpl.String())
 
 	resp, id, err := mg.Send(context.Background(), m)
 	log.Println("Send Email: ", subject, details.Name, details.Email)
@@ -486,7 +486,7 @@ func sendGiftCardEmail(apiKey string, giftCards []types.GiftCard, conf *types.Me
 	}
 
 	m := mg.NewMessage("donotreply@fishingreservationsystem.com", subject, tpl.String(), fmt.Sprintf("%s <%s>", payment.Customer.Name, payment.Customer.Email))
-	m.AddHeader("Content-Type", "text/html")
+	m.SetHtml(tpl.String())
 
 	resp, id, err := mg.Send(context.Background(), m)
 	log.Println("Send Email: ", subject, payment.Customer.Name, payment.Customer.Email)
