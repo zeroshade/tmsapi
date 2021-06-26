@@ -2,7 +2,9 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
+	"fmt"
 	"log"
 	"net/http"
 	"os"
@@ -11,14 +13,12 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/jinzhu/gorm"
+	"github.com/mailgun/mailgun-go/v4"
 	"github.com/zeroshade/tmsapi/internal"
 	"github.com/zeroshade/tmsapi/types"
-
-	"github.com/sendgrid/rest"
-	"github.com/sendgrid/sendgrid-go"
-	"github.com/sendgrid/sendgrid-go/helpers/mail"
 )
 
+var mailgunPublicKey = os.Getenv("MAILGUN_PUBLIC_KEY")
 var twilioAccountSid = os.Getenv("TWILIO_ACCOUNT_SID")
 var twilioAuthToken = os.Getenv("TWILIO_AUTH_TOKEN")
 var twilioMsgingService = os.Getenv("TWILIO_MSGING_SERVICE")
@@ -38,27 +38,38 @@ func sendNotifyEmail(apiKey string, conf *types.MerchantConfig, order *types.Che
 
 	t := template.Must(template.New("notify").Parse(tmpl))
 
-	from := mail.NewEmail("Do Not Reply", "donotreply@websbyjoe.org")
-	to := mail.NewEmail(conf.EmailName, conf.EmailFrom)
-	subject := "Tickets Purchased"
+	// domain := strings.Split(conf.EmailFrom, "@")[1]
+	mg := mailgun.NewMailgun("mg.fishingreservationsystem.com", apiKey)
 	var tpl bytes.Buffer
 	if err := t.Execute(&tpl, order); err != nil {
 		return err
 	}
-	content := mail.NewContent("text/html", tpl.String())
+	subject := "Tickets Purchased"
 
-	m := mail.NewV3MailInit(from, subject, to, content)
-	request := sendgrid.GetRequest(apiKey, "/v3/mail/send", "https://api.sendgrid.com")
-	request.Method = "POST"
-	request.Body = mail.GetRequestBody(m)
-	_, err := sendgrid.API(request)
-	if err != nil {
-		return err
-	}
-	return nil
+	m := mg.NewMessage("donotreply@fishingreservationsystem.com", subject, tpl.String(), fmt.Sprintf("%s <%s>", conf.EmailName, conf.EmailFrom))
+	m.SetHtml(tpl.String())
+
+	resp, id, err := mg.Send(context.Background(), m)
+	log.Println("Send Email: ", subject, conf.EmailName, conf.EmailFrom)
+	log.Println("Response: ", resp, id)
+
+	// from := mail.NewEmail("Do Not Reply", "donotreply@websbyjoe.org")
+	// to := mail.NewEmail(conf.EmailName, conf.EmailFrom)
+
+	// content := mail.NewContent("text/html", tpl.String())
+
+	// m := mail.NewV3MailInit(from, subject, to, content)
+	// request := sendgrid.GetRequest(apiKey, "/v3/mail/send", "https://api.sendgrid.com")
+	// request.Method = "POST"
+	// request.Body = mail.GetRequestBody(m)
+	// _, err := sendgrid.API(request)
+	// if err != nil {
+	// 	return err
+	// }
+	return err
 }
 
-func SendClientMail(apiKey, host, email string, order *types.CheckoutOrder, conf *types.MerchantConfig) (*rest.Response, error) {
+func SendClientMail(apiKey, host, email string, order *types.CheckoutOrder, conf *types.MerchantConfig) (string, error) {
 	type TmplData struct {
 		Host          string
 		PurchaseUnits []types.PurchaseUnit
@@ -81,10 +92,8 @@ func SendClientMail(apiKey, host, email string, order *types.CheckoutOrder, conf
 	<br />`
 
 	log.Println("Send Client Mail:", conf.EmailFrom, email, order.ID)
-
-	from := mail.NewEmail(conf.EmailName, conf.EmailFrom)
-	subject := "Tickets Purchased"
-	to := mail.NewEmail(order.Payer.Name.GivenName+" "+order.Payer.Name.Surname, email)
+	domain := strings.Split(conf.EmailFrom, "@")[1]
+	mg := mailgun.NewMailgun("mg."+domain, apiKey)
 
 	t := template.Must(template.New("notify").Parse(tmpl))
 	var tpl bytes.Buffer
@@ -93,19 +102,31 @@ func SendClientMail(apiKey, host, email string, order *types.CheckoutOrder, conf
 		PurchaseUnits: order.PurchaseUnits,
 		MerchantID:    order.PurchaseUnits[0].Payee.MerchantID,
 		CheckoutID:    order.ID}); err != nil {
-		return nil, err
+		return "", err
 	}
-	content := mail.NewContent("text/html", conf.EmailContent+tpl.String())
 
-	m := mail.NewV3MailInit(from, subject, to, content)
-	request := sendgrid.GetRequest(apiKey, "/v3/mail/send", "https://api.sendgrid.com")
-	request.Method = "POST"
-	request.Body = mail.GetRequestBody(m)
-	response, err := sendgrid.API(request)
-	if err != nil {
-		return nil, err
-	}
-	return response, nil
+	subject := "Tickets Purchased"
+	m := mg.NewMessage(fmt.Sprintf("%s <%s>", conf.EmailName, conf.EmailFrom), subject, conf.EmailContent+tpl.String(), fmt.Sprintf("%s <%s>", order.Payer.Name.GivenName+" "+order.Payer.Name.Surname, email))
+	m.SetHtml(conf.EmailContent + tpl.String())
+
+	resp, id, err := mg.Send(context.Background(), m)
+	log.Println("Send Email: ", subject, order.Payer.Name.GivenName+" "+order.Payer.Name.Surname, email)
+	log.Println("Response: ", resp, id)
+	return resp, err
+	// from := mail.NewEmail(conf.EmailName, conf.EmailFrom)
+	// to := mail.NewEmail(order.Payer.Name.GivenName+" "+order.Payer.Name.Surname, email)
+
+	// content := mail.NewContent("text/html", conf.EmailContent+tpl.String())
+
+	// m := mail.NewV3MailInit(from, subject, to, content)
+	// request := sendgrid.GetRequest(apiKey, "/v3/mail/send", "https://api.sendgrid.com")
+	// request.Method = "POST"
+	// request.Body = mail.GetRequestBody(m)
+	// response, err := sendgrid.API(request)
+	// if err != nil {
+	// 	return nil, err
+	// }
+	// return response, nil
 }
 
 func SendText(db *gorm.DB) gin.HandlerFunc {
@@ -159,7 +180,8 @@ func Resend(db *gorm.DB) gin.HandlerFunc {
 		Email      string `json:"email"`
 	}
 
-	apiKey := os.Getenv("SENDGRID_API_KEY")
+	// apiKey := os.Getenv("SENDGRID_API_KEY")
+	apiKey := os.Getenv("MAILGUN_API_KEY")
 	env := internal.SANDBOX
 	if strings.ToLower(os.Getenv("PAYPAL_ENV")) == "live" {
 		env = internal.LIVE
@@ -199,8 +221,9 @@ func Resend(db *gorm.DB) gin.HandlerFunc {
 			c.JSON(http.StatusFailedDependency, gin.H{"error": err.Error()})
 			return
 		}
+		log.Println("email response: ", response)
 
-		c.Status(response.StatusCode)
+		c.Status(http.StatusOK)
 	}
 }
 
@@ -209,7 +232,8 @@ func ConfirmAndSend(db *gorm.DB) gin.HandlerFunc {
 		CheckoutId string `json:"checkoutId"`
 	}
 
-	apiKey := os.Getenv("SENDGRID_API_KEY")
+	// apiKey := os.Getenv("SENDGRID_API_KEY")
+	apiKey := os.Getenv("MAILGUN_API_KEY")
 
 	env := internal.SANDBOX
 	if strings.ToLower(os.Getenv("PAYPAL_ENV")) == "live" {
@@ -268,6 +292,7 @@ func ConfirmAndSend(db *gorm.DB) gin.HandlerFunc {
 			c.JSON(http.StatusFailedDependency, gin.H{"error": err.Error()})
 			return
 		}
+		log.Println("email response: ", response)
 
 		sendNotifyEmail(apiKey, &conf, &order)
 
@@ -276,7 +301,7 @@ func ConfirmAndSend(db *gorm.DB) gin.HandlerFunc {
 			t.Send(conf.NotifyNumber, "Tickets Purchased by "+order.Payer.Name.GivenName+" "+order.Payer.Name.Surname)
 		}
 
-		c.Status(response.StatusCode)
+		c.Status(http.StatusOK)
 	}
 }
 
