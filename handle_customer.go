@@ -51,7 +51,7 @@ func sendNotifyEmail(apiKey string, conf *types.MerchantConfig, order *types.Che
 
 	resp, id, err := mg.Send(context.Background(), m)
 	log.Println("Send Email: ", subject, conf.EmailName, conf.EmailFrom)
-	log.Println("Response: ", resp, id)
+	log.Println("Response: ", resp, id, err)
 
 	// from := mail.NewEmail("Do Not Reply", "donotreply@websbyjoe.org")
 	// to := mail.NewEmail(conf.EmailName, conf.EmailFrom)
@@ -66,7 +66,7 @@ func sendNotifyEmail(apiKey string, conf *types.MerchantConfig, order *types.Che
 	// if err != nil {
 	// 	return err
 	// }
-	return err
+	return nil
 }
 
 func SendClientMail(apiKey, host, email string, order *types.CheckoutOrder, conf *types.MerchantConfig) (string, error) {
@@ -111,8 +111,8 @@ func SendClientMail(apiKey, host, email string, order *types.CheckoutOrder, conf
 
 	resp, id, err := mg.Send(context.Background(), m)
 	log.Println("Send Email: ", subject, order.Payer.Name.GivenName+" "+order.Payer.Name.Surname, email)
-	log.Println("Response: ", resp, id)
-	return resp, err
+	log.Println("Response: ", resp, id, err)
+	return resp, nil
 	// from := mail.NewEmail(conf.EmailName, conf.EmailFrom)
 	// to := mail.NewEmail(order.Payer.Name.GivenName+" "+order.Payer.Name.Surname, email)
 
