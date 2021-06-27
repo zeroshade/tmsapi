@@ -31,7 +31,7 @@ type FailedCapture struct {
 	Links   []types.Link `json:"links"`
 }
 
-var apiKey = os.Getenv("SENDGRID_API_KEY")
+var apiKey = os.Getenv("MAILGUN_API_KEY")
 
 func AddOrderToDB(cr *CaptureResponse, tx *gorm.DB) *types.CheckoutOrder {
 	var order types.CheckoutOrder
