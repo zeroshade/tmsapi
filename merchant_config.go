@@ -30,7 +30,7 @@ func UpdateMerchantConfig(db *gorm.DB) gin.HandlerFunc {
 		}
 
 		conf.ID = c.Param("merchantid")
-		db.Model(&conf).Save(&conf)
+		db.Model(&conf).Update(&conf)
 		c.Status(http.StatusOK)
 	}
 }
