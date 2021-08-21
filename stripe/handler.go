@@ -185,39 +185,41 @@ func (h Handler) RefundTickets(config *types.MerchantConfig, db *gorm.DB, data j
 			fmt.Println(err)
 		}
 
-		feeAcct := config.StripeAcctMap.Map["feeacct"].String
+		// feeAcct := config.StripeAcctMap.Map["feeacct"].String
 
-		iter := transfer.List(&stripe.TransferListParams{TransferGroup: &pi.TransferGroup})
-		for iter.Next() {
-			acctID := iter.Transfer().Destination.ID
+		// iter := transfer.List(&stripe.TransferListParams{TransferGroup: &pi.TransferGroup})
+		// for iter.Next() {
+		// 	acctID := iter.Transfer().Destination.ID
 
-			// fmt.Println(amt, acctID, iter.Transfer().Amount)
-			var reverseAmount int64
+		// 	// fmt.Println(amt, acctID, iter.Transfer().Amount)
+		// 	var reverseAmount int64
 
-			switch acctID {
-			case config.StripeKey:
-				reverseAmount = int64(int(amt*100) - (item.Quantity * 500))
-				// fmt.Println("Refund:", int(amt*100)-(item.Quantity*500), acctID)
-			case config.StripeSecondary:
-				reverseAmount = int64(item.Quantity * 500)
-				// fmt.Println("Refund:", item.Quantity*500, acctID)
-			case feeAcct:
-				continue
-			}
+		// 	switch acctID {
+		// 	case config.StripeKey:
+		// 		reverseAmount = int64(int(amt*100))
+		// 		// fmt.Println("Refund:", int(amt*100)-(item.Quantity*500), acctID)
+		// 	// case config.StripeSecondary:
+		// 		// reverseAmount = int64(item.Quantity * 500)
+		// 		// fmt.Println("Refund:", item.Quantity*500, acctID)
+		// 	case feeAcct:
+		// 		continue
+		// 	}
 
-			rev, err := reversal.New(&stripe.ReversalParams{
-				Amount:   &reverseAmount,
-				Transfer: &iter.Transfer().ID,
-			})
-			if err != nil {
-				fmt.Println(err)
-			}
-			fmt.Printf("%+v\n", rev)
-		}
+		// 	rev, err := reversal.New(&stripe.ReversalParams{
+		// 		Amount:   &reverseAmount,
+		// 		Transfer: &iter.Transfer().ID,
+		// 	})
+		// 	if err != nil {
+		// 		fmt.Println(err)
+		// 	}
+		// 	fmt.Printf("%+v\n", rev)
+		// }
 
 		refparams := &stripe.RefundParams{
-			Amount:        stripe.Int64(int64(amt * 100)),
-			PaymentIntent: &pi.ID,
+			Amount:               stripe.Int64(int64(amt * 100)),
+			PaymentIntent:        &pi.ID,
+			RefundApplicationFee: stripe.Bool(true),
+			ReverseTransfer:      stripe.Bool(true),
 		}
 		refClient := refund.Client{B: stripe.GetBackend(stripe.APIBackend), Key: key}
 		if isSubAcct {
