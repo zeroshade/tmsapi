@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"math"
 	"os"
 	"regexp"
 	"strconv"
@@ -214,14 +215,19 @@ func (h Handler) RefundTickets(config *types.MerchantConfig, db *gorm.DB, data j
 		// 	fmt.Printf("%+v\n", rev)
 		// }
 
+		total := int64(amt * 100)
+		fee := int64(config.FeePercent * float64(total))
+
 		refparams := &stripe.RefundParams{
-			Amount:               stripe.Int64(int64(amt * 100)),
+			Amount:               stripe.Int64(total + fee),
 			PaymentIntent:        &pi.ID,
-			RefundApplicationFee: stripe.Bool(true),
+			RefundApplicationFee: stripe.Bool(false),
 			// ReverseTransfer:      stripe.Bool(true),
 		}
-		if config.FeePercent > 0 {
-			*refparams.Amount += int64(float64(*refparams.Amount) * config.FeePercent)
+
+		stripeFee := int64(math.Ceil(float64(total+fee)*0.029)) + 30
+		if fee > stripeFee {
+			*refparams.RefundApplicationFee = true
 		}
 
 		refClient := refund.Client{B: stripe.GetBackend(stripe.APIBackend), Key: key}
