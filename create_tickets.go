@@ -25,6 +25,8 @@ const spaceBetween = 15
 var skuRe = regexp.MustCompile(`(\d+)([A-Z]+)(\d{10})\d*`)
 
 func drawPass(f *gofpdf.Fpdf, item types.PassItem, passTitle string, boat *types.Boat, name, tkt, qrname string) {
+	fmt.Println(item, passTitle, *boat, name, tkt, qrname)
+
 	var opt gofpdf.ImageOptions
 	opt.ImageType = "png"
 
@@ -87,7 +89,7 @@ func drawPass(f *gofpdf.Fpdf, item types.PassItem, passTitle string, boat *types
 	f.SetXY(0, starty+passHeight+spaceBetween)
 }
 
-func generatePdf(db *gorm.DB, items []types.PassItem, passTitle, name string, w io.Writer) {
+func generatePdf(db *gorm.DB, items []types.PassItem, passTitle, name, email string, w io.Writer) {
 	var opt gofpdf.ImageOptions
 	opt.ImageType = "png"
 
@@ -132,10 +134,10 @@ func GetBoardingPasses(db *gorm.DB) gin.HandlerFunc {
 			handler = &paypal.Handler{}
 		}
 
-		items, name := handler.GetPassItems(&config, db, c.Param("checkoutid"))
+		items, name, email := handler.GetPassItems(&config, db, c.Param("checkoutid"))
 		c.Header("Content-Type", "application/pdf")
 		c.Header("Content-Disposition", `attachment; filename="boardingpasses_`+c.Param("checkoutid")+`.pdf"`)
 		c.Status(http.StatusOK)
-		generatePdf(db, items, config.PassTitle, name, c.Writer)
+		generatePdf(db, items, config.PassTitle, name, email, c.Writer)
 	}
 }

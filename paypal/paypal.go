@@ -98,7 +98,7 @@ func (h Handler) GetSoldTickets(config *types.MerchantConfig, db *gorm.DB, from,
 	return out, nil
 }
 
-func (h Handler) GetPassItems(conf *types.MerchantConfig, db *gorm.DB, id string) ([]types.PassItem, string) {
+func (h Handler) GetPassItems(conf *types.MerchantConfig, db *gorm.DB, id string) ([]types.PassItem, string, string) {
 	var items []types.PurchaseItem
 	var name string
 	var email string
@@ -119,7 +119,7 @@ func (h Handler) GetPassItems(conf *types.MerchantConfig, db *gorm.DB, id string
 	for idx := range items {
 		ret[idx] = &items[idx]
 	}
-	return ret, name
+	return ret, name, email
 }
 
 func (h Handler) ManualEntry(config *types.MerchantConfig, db *gorm.DB, entry types.Manual) (interface{}, error) {

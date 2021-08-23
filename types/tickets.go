@@ -6,6 +6,7 @@ type PassItem interface {
 	GetDesc() string
 	GetQuantity() uint
 	GetID() string
+	GetAmount() string
 }
 
 type TransferReq struct {

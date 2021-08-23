@@ -188,6 +188,9 @@ func (p *PurchaseItem) GetSku() string    { return p.Sku }
 func (p *PurchaseItem) GetDesc() string   { return p.Description }
 func (p *PurchaseItem) GetQuantity() uint { return p.Quantity }
 func (p *PurchaseItem) GetID() string     { return p.CheckoutID }
+func (p *PurchaseItem) GetAmount() string {
+	return p.Amount.Value
+}
 
 type PurchaseUnit struct {
 	CheckoutID string    `json:"-" gorm:"primary_key"`

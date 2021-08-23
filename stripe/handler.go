@@ -218,7 +218,7 @@ func (h Handler) RefundTickets(config *types.MerchantConfig, db *gorm.DB, data j
 			Amount:               stripe.Int64(int64(amt * 100)),
 			PaymentIntent:        &pi.ID,
 			RefundApplicationFee: stripe.Bool(true),
-			ReverseTransfer:      stripe.Bool(true),
+			// ReverseTransfer:      stripe.Bool(true),
 		}
 		refClient := refund.Client{B: stripe.GetBackend(stripe.APIBackend), Key: key}
 		if isSubAcct {
@@ -253,8 +253,9 @@ func (p *passitem) GetSku() string    { return p.Sku }
 func (p *passitem) GetDesc() string   { return p.Description }
 func (p *passitem) GetQuantity() uint { return p.Quantity }
 func (p *passitem) GetID() string     { return p.PaymentID }
+func (p *passitem) GetAmount() string { return p.Amount }
 
-func (h Handler) GetPassItems(config *types.MerchantConfig, db *gorm.DB, id string) ([]types.PassItem, string) {
+func (h Handler) GetPassItems(config *types.MerchantConfig, db *gorm.DB, id string) ([]types.PassItem, string, string) {
 	var items []passitem
 
 	db.Table("line_items AS li").
@@ -277,7 +278,7 @@ func (h Handler) GetPassItems(config *types.MerchantConfig, db *gorm.DB, id stri
 		ret[idx] = &items[idx]
 	}
 
-	return ret, name
+	return ret, name, email
 }
 
 func (h Handler) TransferTickets(_ *types.MerchantConfig, db *gorm.DB, data []types.TransferReq) (interface{}, error) {
