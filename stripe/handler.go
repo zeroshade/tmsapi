@@ -220,6 +220,10 @@ func (h Handler) RefundTickets(config *types.MerchantConfig, db *gorm.DB, data j
 			RefundApplicationFee: stripe.Bool(true),
 			// ReverseTransfer:      stripe.Bool(true),
 		}
+		if config.FeePercent > 0 {
+			*refparams.Amount += int64(float64(*refparams.Amount) * config.FeePercent)
+		}
+
 		refClient := refund.Client{B: stripe.GetBackend(stripe.APIBackend), Key: key}
 		if isSubAcct {
 			refparams.SetStripeAccount(sk)
