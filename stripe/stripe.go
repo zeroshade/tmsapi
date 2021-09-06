@@ -330,7 +330,10 @@ type notifyItem struct {
 	Quantity    int
 }
 
-var mailgunPublicKey = os.Getenv("MAILGUN_PUBLIC_KEY")
+var (
+	mailgunPublicKey = os.Getenv("MAILGUN_PUBLIC_KEY")
+	mailgunDomain    = os.Getenv("MAILGUN_DOMAIN")
+)
 
 func sendNotifyEmail(apiKey string, conf *types.MerchantConfig, payment *stripe.PaymentIntent, itemList []notifyItem) error {
 	details := payment.Charges.Data[0].BillingDetails
@@ -347,7 +350,7 @@ func sendNotifyEmail(apiKey string, conf *types.MerchantConfig, payment *stripe.
 
 	t := template.Must(template.New("notify").Parse(tmpl))
 
-	mg := mailgun.NewMailgun("mg.fishingreservationsystem.com", apiKey)
+	mg := mailgun.NewMailgun(mailgunDomain, apiKey)
 
 	// from := mail.NewEmail("Fishing Reservation System", "donotreply@fishingreservationsystem.com")
 	// to := mail.NewEmail(conf.EmailName, conf.EmailFrom)
@@ -361,11 +364,12 @@ func sendNotifyEmail(apiKey string, conf *types.MerchantConfig, payment *stripe.
 		return err
 	}
 
-	m := mg.NewMessage("donotreply@fishingreservationsystem.com", subject, tpl.String(), fmt.Sprintf("%s <%s>", conf.EmailName, conf.EmailFrom))
+	to := fmt.Sprintf("%s <%s>", conf.EmailName, conf.EmailFrom)
+	m := mg.NewMessage("donotreply@fishingreservationsystem.com", subject, tpl.String(), to)
 	m.SetHtml(tpl.String())
 
 	resp, id, err := mg.Send(context.Background(), m)
-	log.Println("Send Email: ", subject, conf.EmailName, conf.EmailFrom)
+	log.Println("Send Email: ", subject, to)
 	log.Println("Response: ", resp, id)
 
 	// content := mail.NewContent("text/html", tpl.String())
@@ -381,17 +385,16 @@ func sendNotifyEmail(apiKey string, conf *types.MerchantConfig, payment *stripe.
 	return err
 }
 
-func sendCustomerEmail(apiKey, host string, conf *types.MerchantConfig, payment *stripe.PaymentIntent) error {
+func sendCustomerEmail(db *gorm.DB, apiKey, host string, conf *types.MerchantConfig, payment *stripe.PaymentIntent) error {
 	details := payment.Customer
 
 	const tickettmpl = `
 	<br /><br />
-	Your receipt can be accessed <a href='{{ .Receipt }}'>here</a>.
-	<br/>
+	Your boarding passes and receipt are included as an attachment to this email as a PDF file
+	for easy printing. You can also access your receipt via Stripe by clicking <a href='{{.Receipt}}'>here</a>.
+	<br /><br />
 	If clicking on that doesn't work, you can copy and paste the following URL into
-	your browser to access your receipt: {{ .Receipt }}.
-	<br /><br/>
-	You can download your boarding passes here: <a href='https://{{.Host}}/info/{{.MerchantID}}/passes/{{.PaymentID}}'>Click Here</a>
+	your browser to access your receipt: {{ .Receipt }}.	
 	<br/>`
 
 	const gifttmpl = `
@@ -413,7 +416,7 @@ func sendCustomerEmail(apiKey, host string, conf *types.MerchantConfig, payment 
 		subject = "Gift Cards Purchased"
 	}
 
-	mg := mailgun.NewMailgun("mg.fishingreservationsystem.com", apiKey)
+	mg := mailgun.NewMailgun(mailgunDomain, apiKey)
 
 	// from := mail.NewEmail(conf.EmailName, conf.EmailFrom)
 	// from := mail.NewEmail(conf.EmailName, "donotreply@fishingreservationsystem.com")
@@ -428,11 +431,18 @@ func sendCustomerEmail(apiKey, host string, conf *types.MerchantConfig, payment 
 		return err
 	}
 
-	m := mg.NewMessage("donotreply@fishingreservationsystem.com", subject, tpl.String(), fmt.Sprintf("%s <%s>", details.Name, details.Email))
+	to := fmt.Sprintf("%s <%s>", details.Name, details.Email)
+	m := mg.NewMessage("donotreply@fishingreservationsystem.com", subject, tpl.String(), to)
 	m.SetHtml(tpl.String())
 
+	var pdf bytes.Buffer
+
+	items, _, _ := (Handler{}).GetPassItems(conf, db, payment.ID)
+	generatePdf(db, conf, items, "Boarding Passes", details.Name, details.Email, payment.ID, &pdf)
+	m.AddBufferAttachment("boardingpasses.pdf", pdf.Bytes())
+
 	resp, id, err := mg.Send(context.Background(), m)
-	log.Println("Send Email: ", subject, details.Name, details.Email)
+	log.Println("Send Email: ", subject, to)
 	log.Println("Response: ", resp, id)
 
 	// content := mail.NewContent("text/html", conf.EmailContent+tpl.String())
@@ -589,11 +599,11 @@ func StripeWebhook(db *gorm.DB) gin.HandlerFunc {
 				db.Model(&types.GiftCard{}).Where("id = ?", gift).Update("status", "used")
 			}
 
-			err := sendCustomerEmail(apiKey, c.Request.Host, &conf, &paymentIntent)
-			if err != nil {
-				c.JSON(http.StatusFailedDependency, gin.H{"err": err.Error()})
-				return
-			}
+			// err := sendCustomerEmail(db, apiKey, c.Request.Host, &conf, &paymentIntent)
+			// if err != nil {
+			// 	c.JSON(http.StatusFailedDependency, gin.H{"err": err.Error()})
+			// 	return
+			// }
 
 			var giftCards []types.GiftCard
 			db.Find(&giftCards, "payment_id = ?", paymentIntent.ID)
@@ -754,6 +764,11 @@ func StripeWebhook(db *gorm.DB) gin.HandlerFunc {
 			// 	t, err := transfer.New(transferParams)
 			// 	log.Println("fee transfer:", t.ID, t.Amount, err)
 			// }
+
+			err = sendCustomerEmail(db, apiKey, c.Request.Host, &conf, pm)
+			if err != nil {
+				log.Println("customer email error: ", err)
+			}
 
 			if err := sendNotifyEmail(apiKey, &conf, pm, itemList); err != nil {
 				c.JSON(http.StatusFailedDependency, gin.H{"error": err.Error()})
