@@ -183,7 +183,7 @@ func newDrawPass(f *gofpdf.Fpdf, conf *types.MerchantConfig, passTitle string, i
 	f.Ln(-1)
 	f.Ln(2)
 
-	qrname := fmt.Sprintf("%s-%d", orderid, info.trip.Unix())
+	qrname := fmt.Sprintf("%s-%d", orderid, info.trip.UTC().Unix())
 	data, _ := qrcode.Encode(qrname, qrcode.High, 150)
 	f.RegisterImageOptionsReader(qrname, opt, bytes.NewReader(data))
 	f.ImageOptions(qrname, left+85, f.GetY(), 0, 0, true, opt, 0, "")
@@ -212,7 +212,7 @@ func generatePdf(db *gorm.DB, config *types.MerchantConfig, items []types.PassIt
 		info, ok := tripPasses[nsec]
 		if !ok {
 
-			trip := time.Unix(int64(nsec), 0)
+			trip := time.Unix(int64(nsec), 0).In(timeloc)
 			duration := findDuration(&prod, trip)
 
 			var boat types.Boat
