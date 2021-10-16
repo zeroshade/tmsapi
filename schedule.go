@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"net/http"
 	"time"
 
@@ -71,6 +72,7 @@ func GetSoldTickets(db *gorm.DB) gin.HandlerFunc {
 		var config types.MerchantConfig
 		db.Find(&config, "id = ?", c.Param("merchantid"))
 
+		fmt.Println(config)
 		var handler PaymentHandler
 		switch config.PaymentType {
 		case "paypal":

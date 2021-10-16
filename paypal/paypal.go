@@ -3,8 +3,11 @@ package paypal
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
+	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/jinzhu/gorm"
 	"github.com/lib/pq"
 	"github.com/zeroshade/tmsapi/types"
@@ -123,5 +126,33 @@ func (h Handler) GetPassItems(conf *types.MerchantConfig, db *gorm.DB, id string
 }
 
 func (h Handler) ManualEntry(config *types.MerchantConfig, db *gorm.DB, entry types.Manual) (interface{}, error) {
-	return nil, errors.New("not implemented")
+	coid := uuid.New().String()
+	sku := fmt.Sprintf("%d%s%s", entry.ProductID, strings.ToUpper(entry.TicketType), entry.Timestamp)
+	co := &types.CheckoutOrder{
+		ID:     coid,
+		Status: entry.EntryType,
+		PurchaseUnits: []types.PurchaseUnit{
+			{
+				CheckoutID: coid,
+				Items: []types.PurchaseItem{{
+					CheckoutID: coid,
+					Sku:        sku,
+					Name:       entry.Desc,
+					Quantity:   uint(entry.Quantity),
+				}},
+			},
+		},
+		Payer: &types.Payer{
+			ID: uuid.New().String(),
+		},
+	}
+
+	co.Payer.Email = entry.Email
+	co.Payer.Name.GivenName = entry.Name
+	co.Payer.Phone.PhoneNumber.NationalNumber = entry.Phone
+	co.PurchaseUnits[0].Payee.MerchantID = config.ID
+	co.PurchaseUnits[0].Payee.Email = config.EmailFrom
+
+	db.Save(&co)
+	return nil, nil
 }
