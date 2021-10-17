@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -30,7 +32,34 @@ func (h Handler) RefundTickets(*types.MerchantConfig, *gorm.DB, json.RawMessage)
 }
 
 func (h Handler) TransferTickets(conig *types.MerchantConfig, db *gorm.DB, data []types.TransferReq) (interface{}, error) {
-	return nil, errors.New("Not implemented")
+	for idx := range data {
+		type req struct {
+			Quantity uint
+			Sku      string
+		}
+		var r []req
+		db.Debug().Table("purchase_items AS pi").
+			Joins("left join transfer_reqs AS tr ON (pi.checkout_id = tr.line_item_id AND pi.sku = tr.old_sku)").
+			Where("pi.checkout_id = ?", data[idx].LineItemID).
+			Select("quantity, coalesce(new_sku, sku) AS sku").Scan(&r)
+
+		re := regexp.MustCompile(`(\d+)[A-Z]+(\d{10})`)
+		result := re.FindStringSubmatch(r[0].Sku)
+		oldPid, _ := strconv.Atoi(result[1])
+		oldTm, _ := strconv.ParseInt(result[2], 10, 64)
+
+		result = re.FindStringSubmatch(data[idx].NewSKU)
+		newPid, _ := strconv.Atoi(result[1])
+		newTm, _ := strconv.ParseInt(result[2], 10, 64)
+		db.Table("manual_overrides").Where("product_id = ? AND time = TO_TIMESTAMP(?::INTEGER)", oldPid, oldTm).
+			UpdateColumn("avail", gorm.Expr("avail + ?", r[0].Quantity))
+
+		db.Table("manual_overrides").Where("product_id = ? AND time = TO_TIMESTAMP(?::INTEGER)", newPid, newTm).
+			UpdateColumn("avail", gorm.Expr("avail - ?", r[0].Quantity))
+
+		db.Save(&data[idx])
+	}
+	return nil, nil
 }
 
 func (h Handler) OrdersTimestamp(config *types.MerchantConfig, db *gorm.DB, timestamp string) (interface{}, error) {
@@ -46,6 +75,8 @@ func (h Handler) OrdersTimestamp(config *types.MerchantConfig, db *gorm.DB, time
 		Coid        string `json:"coid"`
 		Sku         string `json:"sku"`
 		Status      string `json:"status"`
+		OrigSku     string `json:"origSku"`
+		OrigProd    string `json:"origName"`
 	}
 
 	var sids pq.StringArray
@@ -58,9 +89,10 @@ func (h Handler) OrdersTimestamp(config *types.MerchantConfig, db *gorm.DB, time
 		Joins("LEFT JOIN checkout_orders as co ON pi.checkout_id = co.id").
 		Joins("LEFT JOIN captures as cap USING(checkout_id)").
 		Joins("LEFT JOIN payers as pa ON co.payer_id = pa.id").
-		Where("(pu.payee_merchant_id = ? OR pu.payee_merchant_id = ANY (?)) AND SUBSTRING(sku FROM '\\d+[A-Z]+(\\d{10})\\d*') = ?",
+		Joins("LEFT JOIN transfer_reqs AS tr ON (pi.checkout_id = tr.line_item_id AND pi.sku = tr.old_sku)").
+		Where("(pu.payee_merchant_id = ? OR pu.payee_merchant_id = ANY (?)) AND SUBSTRING(COALESCE(new_sku, sku) FROM '\\d+[A-Z]+(\\d{10})\\d*') = ?",
 			config.ID, sids, timestamp).
-		Select("pi.name, co.payer_id, pi.checkout_id as coid, sku, pi.description, pi.value, given_name || ' ' || surname as payer, email, phone_number, quantity, cap.status").
+		Select("COALESCE(new_name, pi.name) as name, co.payer_id, pi.checkout_id as coid, COALESCE(new_sku, sku) AS sku, pi.description, pi.value, given_name || ' ' || surname as payer, email, phone_number, quantity, COALESCE(cap.status, co.status) AS status").
 		Scan(&ret)
 
 	return ret, nil
@@ -80,9 +112,10 @@ func (h Handler) GetSoldTickets(config *types.MerchantConfig, db *gorm.DB, from,
 	ids = append(ids, si.SandboxIDs...)
 
 	sub := db.Model(&types.PurchaseItem{}).
+		Joins("LEFT JOIN transfer_reqs AS tr ON (checkout_id = tr.line_item_id AND sku = tr.old_sku)").
 		Select([]string{"checkout_id",
-			`(regexp_matches(sku, '^\d+'))[1]::integer as pid`,
-			"TO_TIMESTAMP(SUBSTRING(sku FROM '\\d[A-Z]+(\\d{10})\\d*')::INTEGER) as tm",
+			`(regexp_matches(COALESCE(new_sku, sku), '^\d+'))[1]::integer as pid`,
+			"TO_TIMESTAMP(SUBSTRING(COALESCE(new_sku, sku) FROM '\\d[A-Z]+(\\d{10})\\d*')::INTEGER) as tm",
 			"SUM(quantity) as q"}).Group("checkout_id, pid, tm").SubQuery()
 
 	var out []result
@@ -108,7 +141,8 @@ func (h Handler) GetPassItems(conf *types.MerchantConfig, db *gorm.DB, id string
 	var payerId string
 
 	db.Where("checkout_id = ?", id).
-		Select([]string{"checkout_id", "sku", "name", "value", "quantity",
+		Joins("left join transfer_reqs AS tr ON (checkout_id = tr.line_item_id AND sku = tr.old_sku)").
+		Select([]string{"checkout_id", "COALESCE(new_sku, sku) AS sku", "COALESCE(new_name, name) AS name", "value", "quantity",
 			`COALESCE(NULLIF(description, ''), SUBSTRING(name from '\w* Ticket, [^,]*, (.*)')) as description`}).
 		Find(&items)
 
