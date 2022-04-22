@@ -561,6 +561,18 @@ func StripeWebhook(db *gorm.DB) gin.HandlerFunc {
 				return
 			}
 
+			if paymentIntent.Charges.Data[0].CalculatedStatementDescriptor == "WWW.CAPTREEISLANDSPIRI" {
+				mg := mailgun.NewMailgun(mailgunDomain, apiKey)
+				subject := "Captree Island Spirit Purchase"
+				m := mg.NewMessage("donotreply@fishingreservationsystem.com", subject, string(event.Data.Raw), "jjtape@optonline.net")
+				resp, id, err := mg.Send(context.Background(), m)
+				log.Println("Sent Captree ISLAND response: ", id, subject, resp)
+				if err != nil {
+					log.Println("got error: ", err)
+				}
+				return
+			}
+
 			var conf types.MerchantConfig
 			db.Find(&conf, "stripe_key = (SELECT acct FROM payment_intents WHERE id = ?)", paymentIntent.ID)
 
