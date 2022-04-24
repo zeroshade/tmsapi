@@ -5,11 +5,12 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/jinzhu/gorm"
+	"github.com/zeroshade/tmsapi/stripe"
 	"github.com/zeroshade/tmsapi/types"
 )
 
 func addProductRoutes(router *gin.RouterGroup, db *gorm.DB) {
-	router.GET("/", GetProducts(db))
+	router.GET("/", getStripeAcct(db), GetProducts(db))
 	router.GET("/product/:prodid", checkJWT(), GetProdEvenDeleted(db))
 	router.PUT("/product", checkJWT(), logActionMiddle(db), SaveProduct(db))
 	router.DELETE("/product/:prodid", checkJWT(), logActionMiddle(db), DeleteProduct(db))
@@ -100,6 +101,11 @@ func GetProdEvenDeleted(db *gorm.DB) gin.HandlerFunc {
 func GetProducts(db *gorm.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var prods []types.Product
+		if c.GetBool("stripe_managed") {
+			stripe.GetProducts(c)
+			return
+		}
+
 		db.Preload("Schedules").Preload("Schedules.TimeArray").Order("name asc").Find(&prods, "merchant_id = ?", c.Param("merchantid"))
 		c.JSON(http.StatusOK, prods)
 	}

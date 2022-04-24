@@ -34,6 +34,9 @@ func AddStripeRoutes(router *gin.RouterGroup, acctHandler gin.HandlerFunc, db *g
 	router.GET("/stripe/:stripe_session", acctHandler, GetSession(db))
 	router.POST("/stripe", acctHandler, CreateSession(db))
 	router.GET("/giftcard/:id", acctHandler, CheckGiftcard(db))
+	router.POST("/deposit/stripe", acctHandler, CheckoutDeposit(db))
+	router.GET("/deposits/:yearmonth", acctHandler, GetDeposits)
+	router.GET("/deposits", acctHandler, GetDepositOrders)
 }
 
 const feeItemName = "Fees"

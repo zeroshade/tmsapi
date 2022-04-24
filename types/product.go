@@ -12,6 +12,7 @@ type Boat struct {
 // Product represents a specific Type of tickets sold
 type Product struct {
 	ID          uint       `json:"id" gorm:"primary_key"`
+	StripeID    string     `json:"stripeId" gorm:"-"`
 	MerchantID  string     `json:"-" gorm:"type:varchar;not null;primary_key;"`
 	CreatedAt   time.Time  `json:"-"`
 	UpdatedAt   time.Time  `json:"-"`
@@ -25,4 +26,5 @@ type Product struct {
 	Fish        string     `json:"fish"`
 	Boat        *Boat      `json:"-"`
 	BoatID      uint       `json:"boatId" gorm:"default:1"`
+	Type        string     `json:"type" gorm:"default:'trip'"`
 }
