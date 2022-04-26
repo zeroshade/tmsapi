@@ -25,7 +25,7 @@ const spaceBetween = 15
 var skuRe = regexp.MustCompile(`(\d+)([A-Z]+)(\d{10})\d*`)
 
 func drawPass(f *gofpdf.Fpdf, item types.PassItem, passTitle string, boat *types.Boat, name, tkt, qrname string) {
-	fmt.Println(item, passTitle, *boat, name, tkt, qrname)
+	// fmt.Println(item, passTitle, *boat, name, tkt, qrname)
 
 	var opt gofpdf.ImageOptions
 	opt.ImageType = "png"

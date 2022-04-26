@@ -644,6 +644,10 @@ func StripeWebhook(db *gorm.DB) gin.HandlerFunc {
 				paymentParams.SetStripeAccount(pi.Acct)
 			}
 
+			if pi.Acct == "acct_1KajuuPBUMQYQx2b" {
+				return
+			}
+
 			piClient := paymentintent.Client{B: stripe.GetBackend(stripe.APIBackend), Key: key}
 
 			pm, err := piClient.Get(sess.PaymentIntent.ID, paymentParams)
