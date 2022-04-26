@@ -17,16 +17,26 @@ import (
 	"github.com/stripe/stripe-go/v72/product"
 )
 
+type DepositSchedule struct {
+	Days     []int    `json:"days"`
+	NotAvail []string `json:"notAvail"`
+	Start    string   `json:"start"`
+	End      string   `json:"end"`
+	Price    string   `json:"price"`
+	Minimum  int      `json:"minimum"`
+	Times    []string `json:"times"`
+}
+
 type DepositProduct struct {
-	ID        string          `json:"stripeId"`
-	Name      string          `json:"name"`
-	Desc      string          `json:"desc"`
-	Color     string          `json:"color"`
-	Publish   bool            `json:"publish"`
-	BoatID    uint            `json:"boatId"`
-	Type      string          `json:"type"`
-	Prices    []DepositPrice  `json:"prices"`
-	Schedules json.RawMessage `json:"schedules"`
+	ID        string            `json:"stripeId"`
+	Name      string            `json:"name"`
+	Desc      string            `json:"desc"`
+	Color     string            `json:"color"`
+	Publish   bool              `json:"publish"`
+	BoatID    uint              `json:"boatId"`
+	Type      string            `json:"type"`
+	Prices    []DepositPrice    `json:"prices"`
+	Schedules []DepositSchedule `json:"schedules"`
 }
 
 type DepositPrice struct {
@@ -54,6 +64,19 @@ func GetProducts(c *gin.Context) {
 	params.SetStripeAccount(sk)
 	params.Context = c.Request.Context()
 
+	type prodmeta struct {
+		Days  [][]int `json:"days_list"`
+		Dates []struct {
+			Start string `json:"start"`
+			End   string `json:"end"`
+		} `json:"dates_list"`
+		Prices   []string   `json:"prices_list"`
+		Minimums []int      `json:"minimum_list"`
+		Times    [][]string `json:"times_list"`
+	}
+
+	var tmpmeta prodmeta
+
 	pitr := pclient.List(params)
 	prods := []DepositProduct{}
 	for pitr.Next() {
@@ -77,6 +100,25 @@ func GetProducts(c *gin.Context) {
 			})
 		}
 
+		json.Unmarshal([]byte(meta["dates_list"]), &tmpmeta.Dates)
+		json.Unmarshal([]byte(meta["days_list"]), &tmpmeta.Days)
+		json.Unmarshal([]byte(meta["prices_list"]), &tmpmeta.Prices)
+		json.Unmarshal([]byte(meta["times_list"]), &tmpmeta.Times)
+		json.Unmarshal([]byte(meta["minimum_list"]), &tmpmeta.Minimums)
+
+		scheds := make([]DepositSchedule, 0)
+		for i := range tmpmeta.Days {
+			scheds = append(scheds, DepositSchedule{
+				Days:     tmpmeta.Days[i],
+				NotAvail: []string{},
+				Start:    tmpmeta.Dates[i].Start,
+				End:      tmpmeta.Dates[i].End,
+				Price:    tmpmeta.Prices[i],
+				Times:    tmpmeta.Times[i],
+				Minimum:  tmpmeta.Minimums[i],
+			})
+		}
+
 		bid, _ := strconv.Atoi(meta["boat_id"])
 		prods = append(prods, DepositProduct{
 			ID:        cur.ID,
@@ -87,7 +129,7 @@ func GetProducts(c *gin.Context) {
 			Type:      "stripe",
 			Color:     meta["color"],
 			Prices:    priceList,
-			Schedules: []byte(meta["schedules"]),
+			Schedules: scheds,
 		})
 	}
 
