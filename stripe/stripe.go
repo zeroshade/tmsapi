@@ -644,15 +644,24 @@ func StripeWebhook(db *gorm.DB) gin.HandlerFunc {
 				paymentParams.SetStripeAccount(pi.Acct)
 			}
 
-			if pi.Acct == "acct_1KajuuPBUMQYQx2b" {
-				return
-			}
-
 			piClient := paymentintent.Client{B: stripe.GetBackend(stripe.APIBackend), Key: key}
 
 			pm, err := piClient.Get(sess.PaymentIntent.ID, paymentParams)
 			if err != nil {
 				log.Println(err)
+			}
+
+			if pi.Acct == "acct_1KajuuPBUMQYQx2b" {
+				mg := mailgun.NewMailgun(mailgunDomain, apiKey)
+
+				content := conf.EmailContent
+				content += `<p>Receipt: <a href='` + pm.Charges.Data[0].ReceiptURL + `'>` + pm.Charges.Data[0].ReceiptURL + `</a>`
+
+				m := mg.NewMessage("donotreply@fishingreservationsystem.com", conf.PassTitle, content, sess.CustomerDetails.Email)
+				m.SetHtml(content)
+				mg.Send(context.Background(), m)
+
+				return
 			}
 
 			// var conf types.MerchantConfig
