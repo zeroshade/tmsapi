@@ -60,6 +60,10 @@ func GetProducts(c *gin.Context) {
 		cur := pitr.Product()
 		meta := cur.Metadata
 
+		if _, ok := meta["istms"]; !ok {
+			continue
+		}
+
 		priceParams.Product = &cur.ID
 		priceList := []DepositPrice{}
 		priceItr := priceClient.List(priceParams)
