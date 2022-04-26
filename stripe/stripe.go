@@ -35,7 +35,7 @@ func AddStripeRoutes(router *gin.RouterGroup, acctHandler gin.HandlerFunc, db *g
 	router.POST("/stripe", acctHandler, CreateSession(db))
 	router.GET("/giftcard/:id", acctHandler, CheckGiftcard(db))
 	router.POST("/deposit/stripe", acctHandler, CheckoutDeposit(db))
-	router.GET("/deposits/:yearmonth", acctHandler, GetDeposits)
+	router.GET("/deposits/:yearmonth", acctHandler, GetDeposits(db))
 	router.GET("/deposits", acctHandler, GetDepositOrders)
 }
 

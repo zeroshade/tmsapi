@@ -186,36 +186,63 @@ func CheckoutDeposit(db *gorm.DB) gin.HandlerFunc {
 	}
 }
 
+type ManualDeposit struct {
+	MerchantID string
+	Date       string
+	Time       string
+	Length     uint
+	Name       string
+	Email      string
+	Phone      string
+}
+
 type DepositSearchResult struct {
 	ID       string            `json:"id"`
 	Desc     string            `json:"description"`
 	Metadata map[string]string `json:"metadata"`
 }
 
-func GetDeposits(c *gin.Context) {
-	key := stripe.Key
-	sk := c.GetString("stripe_acct")
-	if !strings.HasPrefix(sk, "acct_") {
-		key = sk
-		sk = ""
-	}
+func GetDeposits(db *gorm.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		key := stripe.Key
+		sk := c.GetString("stripe_acct")
+		if !strings.HasPrefix(sk, "acct_") {
+			key = sk
+			sk = ""
+		}
 
-	piclient := paymentintent.Client{B: stripe.GetBackend(stripe.APIBackend), Key: key}
-	params := &stripe.PaymentIntentSearchParams{}
-	params.SetStripeAccount(sk)
-	params.Context = c.Request.Context()
-	params.Query = `metadata["yearmonth"]:"` + c.Param("yearmonth") + `"`
-	sitr := piclient.Search(params)
-	res := []DepositSearchResult{}
+		piclient := paymentintent.Client{B: stripe.GetBackend(stripe.APIBackend), Key: key}
+		params := &stripe.PaymentIntentSearchParams{}
+		params.SetStripeAccount(sk)
+		params.Context = c.Request.Context()
+		params.Query = `metadata["yearmonth"]:"` + c.Param("yearmonth") + `"`
+		sitr := piclient.Search(params)
+		res := []DepositSearchResult{}
 
-	for sitr.Next() {
-		pi := sitr.PaymentIntent()
-		res = append(res, DepositSearchResult{
-			ID: pi.ID, Desc: pi.Description,
-			Metadata: pi.Metadata,
-		})
+		for sitr.Next() {
+			pi := sitr.PaymentIntent()
+			res = append(res, DepositSearchResult{
+				ID: pi.ID, Desc: pi.Description,
+				Metadata: pi.Metadata,
+			})
+		}
+
+		var deps []ManualDeposit
+		db.Find(&deps, `to_date(date, 'YYYY-MM-DD') BETWEEN ? AND (?::date + '1 month'::interval)`, c.Param("yearmonth")+"-01", c.Param("yearmonth")+"-01")
+
+		for _, d := range deps {
+			res = append(res, DepositSearchResult{
+				ID: "manual", Desc: "",
+				Metadata: map[string]string{
+					"yearmonth": c.Param("yearmonth"),
+					"date":      d.Date,
+					"time":      d.Time,
+					"length":    strconv.Itoa(int(d.Length)),
+				},
+			})
+		}
+		c.JSON(http.StatusOK, res)
 	}
-	c.JSON(http.StatusOK, res)
 }
 
 func GetDepositOrders(c *gin.Context) {
