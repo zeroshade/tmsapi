@@ -664,6 +664,11 @@ func StripeWebhook(db *gorm.DB) gin.HandlerFunc {
 				m.SetHtml(content)
 				mg.Send(context.Background(), m)
 
+				content = "Deposit made by: " + sess.CustomerDetails.Name + " " + sess.CustomerDetails.Email
+
+				m = mg.NewMessage("donotreply@fishingreservationsystem.com", conf.PassTitle, content, conf.EmailFrom)
+				mg.Send(context.Background(), m)
+
 				return
 			}
 
