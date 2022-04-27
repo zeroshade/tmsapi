@@ -233,13 +233,48 @@ func CheckoutDeposit(db *gorm.DB) gin.HandlerFunc {
 }
 
 type ManualDeposit struct {
-	MerchantID string
-	Date       string
-	Time       string
-	Length     uint
-	Name       string
-	Email      string
-	Phone      string
+	ID         int    `json:"id" gorm:"primary_key;auto_increment;"`
+	MerchantID string `json:"-"`
+	Date       string `json:"date"`
+	Time       string `json:"time"`
+	Length     uint   `json:"length"`
+	Name       string `json:"name"`
+	Email      string `json:"email"`
+	Phone      string `json:"phone"`
+}
+
+func DeleteManualDeposit(db *gorm.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		var req ManualDeposit
+		if err := c.ShouldBindJSON(&req); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+
+		db.Delete(&req)
+	}
+}
+
+func SaveManualDeposit(db *gorm.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		var req ManualDeposit
+		if err := c.ShouldBindJSON(&req); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+
+		req.MerchantID = c.Param("merchantid")
+		db.Save(&req)
+	}
+}
+
+func ListManualDeposits(db *gorm.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		var out []ManualDeposit
+		db.Find(&out, "merchant_id = ?", c.Param("merchantid"))
+
+		c.JSON(http.StatusOK, out)
+	}
 }
 
 type DepositSearchResult struct {
