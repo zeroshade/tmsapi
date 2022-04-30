@@ -102,7 +102,7 @@ func GetProducts(db *gorm.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var prods []types.Product
 		if c.GetBool("stripe_managed") {
-			stripe.GetProducts(c)
+			stripe.GetProducts(db, c)
 			return
 		}
 

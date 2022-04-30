@@ -1,147 +1,170 @@
 package stripe
 
 import (
-	"encoding/json"
 	"fmt"
 	"math"
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/jinzhu/gorm"
+	"github.com/lib/pq"
 	"github.com/stripe/stripe-go/v72"
 	"github.com/stripe/stripe-go/v72/checkout/session"
 	"github.com/stripe/stripe-go/v72/paymentintent"
 	"github.com/stripe/stripe-go/v72/price"
-	"github.com/stripe/stripe-go/v72/product"
+	"github.com/zeroshade/tmsapi/types"
 )
 
 type DepositSchedule struct {
-	Days     []int    `json:"days"`
-	NotAvail []string `json:"notAvail"`
-	Start    string   `json:"start"`
-	End      string   `json:"end"`
-	Price    string   `json:"price"`
-	Minimum  int      `json:"minimum"`
-	Times    []string `json:"times"`
+	ID               uint           `json:"id"`
+	DepositProductID uint           `json:"-"`
+	Days             pq.Int64Array  `json:"days" gorm:"type:integer[]"`
+	NotAvail         pq.StringArray `json:"notAvail,nilasempty" gorm:"type:text[]"`
+	Start            string         `json:"start"`
+	End              string         `json:"end"`
+	Price            string         `json:"price"`
+	Minimum          int            `json:"minimum"`
+	Times            pq.StringArray `json:"times" gorm:"type:text[]"`
 }
 
 type DepositProduct struct {
-	ID        string            `json:"stripeId"`
-	Name      string            `json:"name"`
-	Desc      string            `json:"desc"`
-	Color     string            `json:"color"`
-	Publish   bool              `json:"publish"`
-	BoatID    uint              `json:"boatId"`
-	Type      string            `json:"type"`
-	Prices    []DepositPrice    `json:"prices"`
-	Schedules []DepositSchedule `json:"schedules"`
+	ID         uint              `json:"id" gorm:"primary_key;auto_increment;"`
+	StripeID   string            `json:"stripeId"`
+	MerchantID string            `json:"-" gorm:"type:varchar;not null;primary_key;"`
+	Name       string            `json:"name"`
+	Desc       string            `json:"desc"`
+	Color      string            `json:"color"`
+	Publish    bool              `json:"publish"`
+	BoatID     uint              `json:"boatId"`
+	Type       string            `json:"type"`
+	Prices     []DepositPrice    `json:"prices"`
+	Schedules  []DepositSchedule `json:"schedules"`
 }
 
 type DepositPrice struct {
-	ID         string `json:"id"`
-	Product    string `json:"product"`
-	NickName   string `json:"name"`
-	UnitAmount uint   `json:"amount"`
+	ID               uint   `json:"-"`
+	StripeID         string `json:"id"`
+	DepositProductID uint   `json:"-"`
+	Product          string `json:"product"`
+	NickName         string `json:"name"`
+	UnitAmount       uint   `json:"amount"`
 }
 
-func GetProducts(c *gin.Context) {
-	key := stripe.Key
-	sk := c.GetString("stripe_acct")
-	if !strings.HasPrefix(sk, "acct_") {
-		key = sk
-		sk = ""
+func GetProducts(db *gorm.DB, c *gin.Context) {
+	var prod []DepositProduct
+	db.Preload("Schedules").Preload("Prices").Find(&prod, "merchant_id = ?", c.Param("merchantid"))
+
+	var origprods []types.Product
+	db.Preload("Schedules").Preload("Schedules.TimeArray").Order("name asc").Find(&origprods, "merchant_id = ?", c.Param("merchantid"))
+
+	var out []interface{}
+	for _, p := range prod {
+		out = append(out, p)
 	}
-
-	priceClient := price.Client{B: stripe.GetBackend(stripe.APIBackend), Key: key}
-	priceParams := &stripe.PriceListParams{}
-	priceParams.SetStripeAccount(sk)
-	priceParams.Context = c.Request.Context()
-
-	pclient := product.Client{B: stripe.GetBackend(stripe.APIBackend), Key: key}
-	params := &stripe.ProductListParams{}
-	params.SetStripeAccount(sk)
-	params.Context = c.Request.Context()
-
-	type prodmeta struct {
-		Days  [][]int `json:"days_list"`
-		Dates []struct {
-			Start string `json:"start"`
-			End   string `json:"end"`
-		} `json:"dates_list"`
-		Prices   []string   `json:"prices_list"`
-		Minimums []int      `json:"minimum_list"`
-		Times    [][]string `json:"times_list"`
+	for _, p := range origprods {
+		out = append(out, p)
 	}
+	c.JSON(http.StatusOK, out)
 
-	var tmpmeta prodmeta
+	// key := stripe.Key
+	// sk := c.GetString("stripe_acct")
+	// if !strings.HasPrefix(sk, "acct_") {
+	// 	key = sk
+	// 	sk = ""
+	// }
 
-	pitr := pclient.List(params)
-	prods := []DepositProduct{}
-	for pitr.Next() {
-		cur := pitr.Product()
-		meta := cur.Metadata
+	// priceClient := price.Client{B: stripe.GetBackend(stripe.APIBackend), Key: key}
+	// priceParams := &stripe.PriceListParams{}
+	// priceParams.SetStripeAccount(sk)
+	// priceParams.Context = c.Request.Context()
 
-		if _, ok := meta["istms"]; !ok {
-			continue
-		}
+	// pclient := product.Client{B: stripe.GetBackend(stripe.APIBackend), Key: key}
+	// params := &stripe.ProductListParams{}
+	// params.SetStripeAccount(sk)
+	// params.Context = c.Request.Context()
 
-		priceParams.Product = &cur.ID
-		priceList := []DepositPrice{}
-		priceItr := priceClient.List(priceParams)
-		for priceItr.Next() {
-			p := priceItr.Price()
-			priceList = append(priceList, DepositPrice{
-				ID:         p.ID,
-				NickName:   p.Nickname,
-				UnitAmount: uint(p.UnitAmount),
-				Product:    cur.ID,
-			})
-		}
+	// type prodmeta struct {
+	// 	Days  []pq.Int64Array `json:"days_list"`
+	// 	Dates []struct {
+	// 		Start string `json:"start"`
+	// 		End   string `json:"end"`
+	// 	} `json:"dates_list"`
+	// 	Prices   []string   `json:"prices_list"`
+	// 	Minimums []int      `json:"minimum_list"`
+	// 	Times    [][]string `json:"times_list"`
+	// }
 
-		json.Unmarshal([]byte(meta["dates_list"]), &tmpmeta.Dates)
-		json.Unmarshal([]byte(meta["days_list"]), &tmpmeta.Days)
-		json.Unmarshal([]byte(meta["prices_list"]), &tmpmeta.Prices)
-		json.Unmarshal([]byte(meta["times_list"]), &tmpmeta.Times)
-		json.Unmarshal([]byte(meta["minimum_list"]), &tmpmeta.Minimums)
+	// var tmpmeta prodmeta
 
-		scheds := make([]DepositSchedule, 0)
-		for i := range tmpmeta.Days {
-			scheds = append(scheds, DepositSchedule{
-				Days:     tmpmeta.Days[i],
-				NotAvail: []string{},
-				Start:    tmpmeta.Dates[i].Start,
-				End:      tmpmeta.Dates[i].End,
-				Price:    tmpmeta.Prices[i],
-				Times:    tmpmeta.Times[i],
-				Minimum:  tmpmeta.Minimums[i],
-			})
-		}
+	// pitr := pclient.List(params)
+	// prods := []DepositProduct{}
+	// for pitr.Next() {
+	// 	cur := pitr.Product()
+	// 	meta := cur.Metadata
 
-		bid, _ := strconv.Atoi(meta["boat_id"])
-		prods = append(prods, DepositProduct{
-			ID:        cur.ID,
-			Name:      cur.Name,
-			Desc:      cur.Description,
-			Publish:   cur.Active,
-			BoatID:    uint(bid),
-			Type:      "stripe",
-			Color:     meta["color"],
-			Prices:    priceList,
-			Schedules: scheds,
-		})
-	}
+	// 	if _, ok := meta["istms"]; !ok {
+	// 		continue
+	// 	}
 
-	c.JSON(http.StatusOK, prods)
+	// 	priceParams.Product = &cur.ID
+	// 	priceList := []DepositPrice{}
+	// 	priceItr := priceClient.List(priceParams)
+	// 	for priceItr.Next() {
+	// 		p := priceItr.Price()
+	// 		priceList = append(priceList, DepositPrice{
+	// 			StripeID:   p.ID,
+	// 			NickName:   p.Nickname,
+	// 			UnitAmount: uint(p.UnitAmount),
+	// 			Product:    cur.ID,
+	// 		})
+	// 	}
+
+	// 	json.Unmarshal([]byte(meta["dates_list"]), &tmpmeta.Dates)
+	// 	json.Unmarshal([]byte(meta["days_list"]), &tmpmeta.Days)
+	// 	json.Unmarshal([]byte(meta["prices_list"]), &tmpmeta.Prices)
+	// 	json.Unmarshal([]byte(meta["times_list"]), &tmpmeta.Times)
+	// 	json.Unmarshal([]byte(meta["minimum_list"]), &tmpmeta.Minimums)
+
+	// 	scheds := make([]DepositSchedule, 0)
+	// 	for i := range tmpmeta.Days {
+	// 		scheds = append(scheds, DepositSchedule{
+	// 			Days:     tmpmeta.Days[i],
+	// 			NotAvail: []string{},
+	// 			Start:    tmpmeta.Dates[i].Start,
+	// 			End:      tmpmeta.Dates[i].End,
+	// 			Price:    tmpmeta.Prices[i],
+	// 			Times:    tmpmeta.Times[i],
+	// 			Minimum:  tmpmeta.Minimums[i],
+	// 		})
+	// 	}
+
+	// 	bid, _ := strconv.Atoi(meta["boat_id"])
+	// 	prods = append(prods, DepositProduct{
+	// 		StripeID:  cur.ID,
+	// 		Name:      cur.Name,
+	// 		Desc:      cur.Description,
+	// 		Publish:   cur.Active,
+	// 		BoatID:    uint(bid),
+	// 		Type:      "stripe",
+	// 		Color:     meta["color"],
+	// 		Prices:    priceList,
+	// 		Schedules: scheds,
+	// 	})
+	// }
+
+	// c.JSON(http.StatusOK, prods)
 }
 
 type CreateDepositCheckout struct {
-	Date       string `json:"date"`
-	Time       string `json:"time"`
-	PriceID    string `json:"priceId"`
-	TripLength int    `json:"tripLength"`
-	TripType   string `json:"tripType"`
+	Date         string `json:"date"`
+	Time         string `json:"time"`
+	PriceID      string `json:"priceId"`
+	TripLength   int    `json:"tripLength"`
+	TripType     string `json:"tripType"`
+	EstimatedPpl int    `json:"estimated"`
 }
 
 func CheckoutDeposit(db *gorm.DB) gin.HandlerFunc {
@@ -200,8 +223,15 @@ func CheckoutDeposit(db *gorm.DB) gin.HandlerFunc {
 			})
 		}
 
+		t, err := time.Parse("2006-01-02 15:04", req.Date+" "+req.Time)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+
 		params.PaymentIntentData = &stripe.CheckoutSessionPaymentIntentDataParams{
-			Description: stripe.String(fmt.Sprintf("Deposit for %d hour %s trip, %s %s", req.TripLength, req.TripType, req.Date, req.Time)),
+			Description: stripe.String(fmt.Sprintf("Deposit for %d hour %s trip, %s; Estimated: %d people",
+				req.TripLength, req.TripType, t.Format("Mon, 02 Jan 2006 15:04 PM"), req.EstimatedPpl)),
 			Metadata: map[string]string{
 				"yearmonth": req.Date[:len(req.Date)-3],
 				"date":      req.Date, "time": req.Time,
@@ -296,7 +326,7 @@ func GetDeposits(db *gorm.DB) gin.HandlerFunc {
 		params := &stripe.PaymentIntentSearchParams{}
 		params.SetStripeAccount(sk)
 		params.Context = c.Request.Context()
-		params.Query = `metadata["yearmonth"]:"` + c.Param("yearmonth") + `"`
+		params.Query = `status:"succeeded" and metadata["yearmonth"]:"` + c.Param("yearmonth") + `"`
 		sitr := piclient.Search(params)
 		res := []DepositSearchResult{}
 
