@@ -73,6 +73,7 @@ func getStripeAcct(db *gorm.DB) gin.HandlerFunc {
 		c.Set("stripe_acct", conf.StripeKey)
 		c.Set("fee_pct", conf.FeePercent)
 		c.Set("stripe_managed", conf.StripeManagedProds)
+		c.Set("fuel_surcharge", conf.FuelSurcharge)
 		c.Next()
 	}
 }

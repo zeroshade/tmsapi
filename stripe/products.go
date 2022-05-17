@@ -207,6 +207,21 @@ func CheckoutDeposit(db *gorm.DB) gin.HandlerFunc {
 			CancelURL:  stripe.String(c.Request.Header.Get("x-calendar-origin") + "?status=cancelled&stripe_session_id={CHECKOUT_SESSION_ID}"),
 		}
 
+		fuelSurcharge := c.GetFloat64("fuel_surcharge")
+		surcharge := int64(p.UnitAmountDecimal * fuelSurcharge)
+		if surcharge > 0 {
+			params.LineItems = append(params.LineItems, &stripe.CheckoutSessionLineItemParams{
+				Quantity: stripe.Int64(1),
+				PriceData: &stripe.CheckoutSessionLineItemPriceDataParams{
+					Currency: stripe.String(string(stripe.CurrencyUSD)),
+					ProductData: &stripe.CheckoutSessionLineItemPriceDataProductDataParams{
+						Name: stripe.String("Fuel Surcharge"),
+					},
+					UnitAmount: stripe.Int64(surcharge),
+				},
+			})
+		}
+
 		feePct := c.GetFloat64("fee_pct")
 		fee := int64(p.UnitAmountDecimal * feePct)
 

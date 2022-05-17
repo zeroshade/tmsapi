@@ -28,6 +28,7 @@ type MerchantConfig struct {
 	StripeAcctMap      hstore.Hstore `json:"-"`
 	PaymentType        string        `json:"-"`
 	FeePercent         float64       `json:"-"`
+	FuelSurcharge      float64       `json:"-"`
 	LogoBytes          []byte        `json:"-"`
 	StripeManagedProds bool          `json:"-"`
 }
