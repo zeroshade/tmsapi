@@ -207,6 +207,9 @@ func CreateSession(db *gorm.DB) gin.HandlerFunc {
 					MaxRedemptions: stripe.Int64(1),
 				}
 				couponParams.Metadata = map[string]string{"giftid": cart.UseGiftCard}
+				if isSubAcct {
+					couponParams.SetStripeAccount(sk)
+				}
 				discount, err = coupon.New(couponParams)
 
 				if err != nil {
