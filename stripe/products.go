@@ -14,7 +14,6 @@ import (
 	"github.com/stripe/stripe-go/v72"
 	"github.com/stripe/stripe-go/v72/charge"
 	"github.com/stripe/stripe-go/v72/checkout/session"
-	"github.com/stripe/stripe-go/v72/paymentintent"
 	"github.com/stripe/stripe-go/v72/price"
 	"github.com/zeroshade/tmsapi/types"
 )
@@ -338,16 +337,20 @@ func GetDeposits(db *gorm.DB) gin.HandlerFunc {
 			sk = ""
 		}
 
-		piclient := paymentintent.Client{B: stripe.GetBackend(stripe.APIBackend), Key: key}
-		params := &stripe.PaymentIntentSearchParams{}
+		cclient := charge.Client{B: stripe.GetBackend(stripe.APIBackend), Key: key}
+		params := &stripe.ChargeSearchParams{}
+
+		// piclient := paymentintent.Client{B: stripe.GetBackend(stripe.APIBackend), Key: key}
+		// params := &stripe.PaymentIntentSearchParams{}
+		params.AddExpand("data.payment_intent")
 		params.SetStripeAccount(sk)
 		params.Context = c.Request.Context()
-		params.Query = `status:"succeeded" and metadata["yearmonth"]:"` + c.Param("yearmonth") + `"`
-		sitr := piclient.Search(params)
+		params.Query = `refunded:"false" AND status:"succeeded" AND metadata["yearmonth"]:"` + c.Param("yearmonth") + `"`
+		sitr := cclient.Search(params)
 		res := []DepositSearchResult{}
 
 		for sitr.Next() {
-			pi := sitr.PaymentIntent()
+			pi := sitr.Charge().PaymentIntent
 			res = append(res, DepositSearchResult{
 				ID: pi.ID, Desc: pi.Description,
 				Metadata: pi.Metadata,
