@@ -12,6 +12,7 @@ import (
 	"github.com/jinzhu/gorm"
 	"github.com/lib/pq"
 	"github.com/stripe/stripe-go/v72"
+	"github.com/stripe/stripe-go/v72/charge"
 	"github.com/stripe/stripe-go/v72/checkout/session"
 	"github.com/stripe/stripe-go/v72/paymentintent"
 	"github.com/stripe/stripe-go/v72/price"
@@ -379,17 +380,26 @@ func GetDepositOrders(c *gin.Context) {
 		sk = ""
 	}
 
-	piclient := paymentintent.Client{B: stripe.GetBackend(stripe.APIBackend), Key: key}
-	params := &stripe.PaymentIntentSearchParams{}
+	cclient := charge.Client{B: stripe.GetBackend(stripe.APIBackend), Key: key}
+	params := &stripe.ChargeSearchParams{}
 	params.SetStripeAccount(sk)
 	params.AddExpand("data.customer")
+	params.AddExpand("data.payment_intent")
 	params.Context = c.Request.Context()
-	params.Query = `status:"succeeded"`
-	sitr := piclient.Search(params)
+	params.Query = `status:"succeeded" AND refunded:"false"`
+	sitr := cclient.Search(params)
+
+	// piclient := paymentintent.Client{B: stripe.GetBackend(stripe.APIBackend), Key: key}
+	// params := &stripe.PaymentIntentSearchParams{}
+	// params.SetStripeAccount(sk)
+	// params.AddExpand("data.customer")
+	// params.Context = c.Request.Context()
+	// params.Query = `status:"succeeded"`
+	// sitr := piclient.Search(params)
 	res := []*stripe.PaymentIntent{}
 	for sitr.Next() {
-		if strings.HasPrefix(sitr.PaymentIntent().Description, "Deposit") {
-			res = append(res, sitr.PaymentIntent())
+		if strings.HasPrefix(sitr.Charge().Description, "Deposit") {
+			res = append(res, sitr.Charge().PaymentIntent)
 		}
 	}
 	c.JSON(http.StatusOK, res)
