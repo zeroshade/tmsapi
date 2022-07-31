@@ -383,14 +383,20 @@ func GetDepositOrders(c *gin.Context) {
 		sk = ""
 	}
 
+	yr := c.Query("year")
+	mn := c.Query("month")
+
+	yearmonth := fmt.Sprintf("%s-%s", yr, mn)
+
 	cclient := charge.Client{B: stripe.GetBackend(stripe.APIBackend), Key: key}
 	params := &stripe.ChargeSearchParams{}
 	params.SetStripeAccount(sk)
-	params.AddExpand("data.customer")
+	// params.AddExpand("data.customer")
 	params.AddExpand("data.payment_intent")
 	params.AddExpand("data.payment_intent.customer")
 	params.Context = c.Request.Context()
-	params.Query = `status:"succeeded" AND refunded:"false"`
+	params.Query = `status:"succeeded" AND refunded:"false" AND metadata['yearmonth']:"` + yearmonth + `"`
+
 	sitr := cclient.Search(params)
 
 	// piclient := paymentintent.Client{B: stripe.GetBackend(stripe.APIBackend), Key: key}
