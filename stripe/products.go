@@ -388,6 +388,7 @@ func GetDepositOrders(c *gin.Context) {
 	params.SetStripeAccount(sk)
 	params.AddExpand("data.customer")
 	params.AddExpand("data.payment_intent")
+	params.AddExpand("data.payment_intent.customer")
 	params.Context = c.Request.Context()
 	params.Query = `status:"succeeded" AND refunded:"false"`
 	sitr := cclient.Search(params)
