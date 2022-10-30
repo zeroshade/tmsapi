@@ -93,7 +93,8 @@ func main() {
 		&types.Transaction{}, &types.Payment{}, &types.Sale{}, &types.PayerInfo{}, &types.WebHookEvent{}, &types.Item{}, &types.SandboxInfo{},
 		&types.CheckoutOrder{}, &types.Payer{}, &types.PurchaseItem{}, &types.PurchaseUnit{}, &types.Capture{}, &types.MerchantConfig{},
 		&ManualOverride{}, &types.Refund{}, &types.Boat{}, &types.LogAction{}, &stripe.PaymentIntent{}, &stripe.LineItem{}, &types.TransferReq{},
-		&types.GiftCard{}, &stripe.ManualPayerInfo{}, &stripe.ManualDeposit{}, &stripe.DepositProduct{}, &stripe.DepositSchedule{}, &stripe.DepositPrice{})
+		&types.GiftCard{}, &stripe.ManualPayerInfo{}, &stripe.ManualDeposit{}, &stripe.DepositProduct{}, &stripe.DepositSchedule{},
+		&stripe.DepositPrice{}, &types.Show{})
 	db.Model(&types.Schedule{}).Association("TimeArray")
 	db.Model(&types.Schedule{}).Association("NotAvail")
 	db.Model(&types.Payment{}).Association("Payer.PayerInfo")
@@ -133,6 +134,7 @@ func main() {
 	addProductRoutes(merchant, db)
 	addUserRoutes(merchant, db)
 	addMerchantConfigRoutes(merchant, db)
+	addShowRoutes(merchant, db)
 	stripe.AddStripeRoutes(merchant, getStripeAcct(db), db)
 	merchant.GET("/passes/:checkoutid", GetBoardingPasses(db))
 	merchant.GET("/logactions", checkJWT(), getLogActions(db))
