@@ -215,6 +215,9 @@ func (pu *PurchaseUnit) AfterCreate(tx *gorm.DB) error {
 		tx.Create(&pu.Items[idx])
 
 		res := re.FindStringSubmatch(item.Sku)
+		if len(res) < 3 {
+			continue
+		}
 		pid, _ := strconv.Atoi(res[1])
 		timestamp, _ := strconv.ParseInt(res[2], 10, 64)
 
