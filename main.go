@@ -94,7 +94,7 @@ func main() {
 		&types.CheckoutOrder{}, &types.Payer{}, &types.PurchaseItem{}, &types.PurchaseUnit{}, &types.Capture{}, &types.MerchantConfig{},
 		&ManualOverride{}, &types.Refund{}, &types.Boat{}, &types.LogAction{}, &stripe.PaymentIntent{}, &stripe.LineItem{}, &types.TransferReq{},
 		&types.GiftCard{}, &stripe.ManualPayerInfo{}, &stripe.ManualDeposit{}, &stripe.DepositProduct{}, &stripe.DepositSchedule{},
-		&stripe.DepositPrice{}, &types.Show{})
+		&stripe.DepositPrice{}, &types.Show{}, &types.TicketUsage{})
 	db.Model(&types.Schedule{}).Association("TimeArray")
 	db.Model(&types.Schedule{}).Association("NotAvail")
 	db.Model(&types.Payment{}).Association("Payer.PayerInfo")

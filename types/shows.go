@@ -15,5 +15,10 @@ type Show struct {
 	Desc       string     `json:"desc"`
 	Price      string     `json:"price"`
 	Dates      string     `json:"dates" gorm:"type:daterange"`
-	Logo       []byte     `json:"logo"`
+	Logo       string     `json:"logoData"`
+}
+
+type TicketUsage struct {
+	TicketID string `json:"ticket_id" gorm:"primary_key;type:varchar"`
+	Used     bool   `json:"used"`
 }
