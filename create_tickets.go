@@ -87,8 +87,8 @@ func drawShowTicket(f *gofpdf.Fpdf, logoInfo *gofpdf.ImageInfoType, show *types.
 	f.Ln(8)
 	f.Image(qrname, left+122, starty+logoHeight+8, 30, 0, false, "", 0, "")
 
-	f.SetFont("Courier", "I", 10)
-	f.SetXY(205-45, starty+logoHeight+14)
+	f.SetFont("Courier", "BI", 13)
+	f.SetXY(205-50, starty+logoHeight+14)
 	f.CellFormat(10, 6, qrname[:18], "", 2, "", false, 0, "")
 	f.CellFormat(10, 6, qrname[18:], "", 0, "", false, 0, "")
 
