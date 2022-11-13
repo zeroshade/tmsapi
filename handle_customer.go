@@ -75,6 +75,12 @@ func SendClientMail(apiKey, host, email string, order *types.CheckoutOrder, conf
 		PurchaseUnits []types.PurchaseUnit
 		MerchantID    string
 		CheckoutID    string
+		DownloadType  string
+	}
+
+	downloadType := "boarding passes"
+	if strings.HasPrefix(order.PurchaseUnits[0].Items[0].Sku, "SHOW") {
+		downloadType = "tickets"
 	}
 
 	const tmpl = `
@@ -88,7 +94,7 @@ func SendClientMail(apiKey, host, email string, order *types.CheckoutOrder, conf
 	</ul>
 	{{- end }}
 	<br />
-	You can download your boarding passes here: <a href='https://{{.Host}}/info/{{.MerchantID}}/passes/{{.CheckoutID}}'>Click Here</a>
+	You can download your {{ .DownloadType }} here: <a href='https://{{.Host}}/info/{{.MerchantID}}/passes/{{.CheckoutID}}'>Click Here</a>
 	<br />`
 
 	log.Println("Send Client Mail:", conf.EmailFrom, email, order.ID)
@@ -101,6 +107,7 @@ func SendClientMail(apiKey, host, email string, order *types.CheckoutOrder, conf
 		Host:          host,
 		PurchaseUnits: order.PurchaseUnits,
 		MerchantID:    order.PurchaseUnits[0].Payee.MerchantID,
+		DownloadType:  downloadType,
 		CheckoutID:    order.ID}); err != nil {
 		return "", err
 	}
@@ -170,7 +177,7 @@ func SendText(db *gorm.DB) gin.HandlerFunc {
 		}
 
 		t := internal.NewTwilio(conf.TwilioAcctSID, conf.TwilioAcctToken, conf.TwilioFromNumber)
-		t.Send(r.Phone, "Boarding Passes Link: https://"+c.Request.Host+"/info/"+order.PurchaseUnits[0].Payee.MerchantID+"/passes/"+order.ID)
+		t.Send(r.Phone, "Tickets Link: https://"+c.Request.Host+"/info/"+order.PurchaseUnits[0].Payee.MerchantID+"/passes/"+order.ID)
 	}
 }
 

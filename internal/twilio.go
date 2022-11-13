@@ -2,6 +2,7 @@ package internal
 
 import (
 	"encoding/json"
+	"fmt"
 	"log"
 	"net/http"
 	"net/url"
@@ -10,6 +11,7 @@ import (
 )
 
 var twilioMsgFrom = os.Getenv("TWILIO_MSG_FROM")
+var twilioMsgSvcSID = os.Getenv("TWILIO_MSGING_SERVICE")
 
 type twilio struct {
 	sid   string
@@ -27,8 +29,8 @@ func NewTwilio(sid, token, from string) *twilio {
 
 func (t *twilio) Send(to, body string) error {
 	msgData := url.Values{}
-	msgData.Set("To", to)
-	msgData.Set("From", t.from)
+	msgData.Set("To", "+"+to)
+	msgData.Set("MessagingServiceSid", twilioMsgSvcSID)
 	msgData.Set("Body", body)
 
 	twilioApiUrl := "https://api.twilio.com/2010-04-01/Accounts/" + t.sid + "/Messages.json"
@@ -39,7 +41,11 @@ func (t *twilio) Send(to, body string) error {
 	req.Header.Add("Accept", "application/json")
 	req.Header.Add("Content-Type", "application/x-www-form-urlencoded")
 
-	resp, _ := client.Do(req)
+	resp, err := client.Do(req)
+	if err != nil {
+		fmt.Println(err)
+		return err
+	}
 	if resp.StatusCode >= 200 && resp.StatusCode < 300 {
 		var data map[string]interface{}
 		defer resp.Body.Close()

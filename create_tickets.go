@@ -74,6 +74,9 @@ func drawShowTicket(f *gofpdf.Fpdf, logoInfo *gofpdf.ImageInfoType, show *types.
 	f.CellFormat(20, 7, "Item:", "", 1, "L", false, 0, "")
 	f.SetFontStyle("")
 	f.Cell(50, 7, item.GetName())
+	f.Ln(7)
+	start, end, _ := show.GetDates()
+	f.Cell(50, 7, fmt.Sprintf("%s - %s", start.Format("Jan _2"), end.Format("Jan _2, '06")))
 
 	f.SetXY(left+125, starty+logoHeight+2)
 	f.SetFontStyle("BU")
