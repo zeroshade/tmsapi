@@ -11,7 +11,7 @@ type PassItem interface {
 
 type TransferReq struct {
 	LineItemID string `json:"id" gorm:"primary_key"`
-	NewSKU     string `json:"newsku"`
+	NewSKU     string `json:"newsku" gorm:"primary_key"`
 	NewName    string `json:"newname"`
 	OldSku     string `json:"oldsku"`
 }
