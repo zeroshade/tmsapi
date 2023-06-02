@@ -395,7 +395,7 @@ func GetDepositOrders(c *gin.Context) {
 	params.AddExpand("data.payment_intent")
 	params.AddExpand("data.payment_intent.customer")
 	params.Context = c.Request.Context()
-	params.Query = `status:"succeeded" AND refunded:"false" AND metadata['yearmonth']:"` + yearmonth + `"`
+	params.Query = `status:"succeeded" AND refunded:null AND metadata['yearmonth']:"` + yearmonth + `"`
 
 	sitr := cclient.Search(params)
 
