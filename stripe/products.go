@@ -345,7 +345,7 @@ func GetDeposits(db *gorm.DB) gin.HandlerFunc {
 		params.AddExpand("data.payment_intent")
 		params.SetStripeAccount(sk)
 		params.Context = c.Request.Context()
-		params.Query = `refunded:"false" AND status:"succeeded" AND metadata["yearmonth"]:"` + c.Param("yearmonth") + `"`
+		params.Query = `refunded:null AND status:"succeeded" AND metadata["yearmonth"]:"` + c.Param("yearmonth") + `"`
 		sitr := cclient.Search(params)
 		res := []DepositSearchResult{}
 
