@@ -12,6 +12,8 @@ import (
 
 var twilioMsgFrom = os.Getenv("TWILIO_MSG_FROM")
 var twilioMsgSvcSID = os.Getenv("TWILIO_MSGING_SERVICE")
+var twilioSID = os.Getenv("TWILIO_ACCOUNT_SID")
+var twilioToken = os.Getenv("TWILIO_AUTH_TOKEN")
 
 type twilio struct {
 	sid   string
@@ -24,6 +26,14 @@ func NewTwilio(sid, token, from string) *twilio {
 		sid:   sid,
 		token: token,
 		from:  from,
+	}
+}
+
+func NewDefaultTwilio() *twilio {
+	return &twilio{
+		sid:   twilioSID,
+		token: twilioToken,
+		from:  twilioMsgFrom,
 	}
 }
 

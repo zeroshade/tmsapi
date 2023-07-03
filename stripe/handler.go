@@ -426,7 +426,8 @@ func (h Handler) RedeemTickets(config *types.MerchantConfig, db *gorm.DB, data j
 	}, notifyList)
 
 	if config.SendSMS {
-		t := internal.NewTwilio(config.TwilioAcctSID, config.TwilioAcctToken, config.TwilioFromNumber)
+		// t := internal.NewTwilio(config.TwilioAcctSID, config.TwilioAcctToken, config.TwilioFromNumber)
+		t := internal.NewDefaultTwilio()
 		t.Send(config.NotifyNumber, "Tickets Purchased by "+redeem.Name)
 	}
 

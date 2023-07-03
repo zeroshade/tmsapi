@@ -176,7 +176,8 @@ func SendText(db *gorm.DB) gin.HandlerFunc {
 			db.Find(&conf)
 		}
 
-		t := internal.NewTwilio(conf.TwilioAcctSID, conf.TwilioAcctToken, conf.TwilioFromNumber)
+		// t := internal.NewTwilio(conf.TwilioAcctSID, conf.TwilioAcctToken, conf.TwilioFromNumber)
+		t := internal.NewDefaultTwilio()
 		t.Send(r.Phone, "Tickets Link: https://"+c.Request.Host+"/info/"+order.PurchaseUnits[0].Payee.MerchantID+"/passes/"+order.ID)
 	}
 }
@@ -304,7 +305,8 @@ func ConfirmAndSend(db *gorm.DB) gin.HandlerFunc {
 		sendNotifyEmail(apiKey, &conf, &order)
 
 		if conf.SendSMS {
-			t := internal.NewTwilio(conf.TwilioAcctSID, conf.TwilioAcctToken, conf.TwilioFromNumber)
+			// t := internal.NewTwilio(conf.TwilioAcctSID, conf.TwilioAcctToken, conf.TwilioFromNumber)
+			t := internal.NewDefaultTwilio()
 			t.Send(conf.NotifyNumber, "Tickets Purchased by "+order.Payer.Name.GivenName+" "+order.Payer.Name.Surname)
 		}
 
