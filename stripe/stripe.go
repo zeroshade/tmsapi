@@ -335,6 +335,7 @@ func CreateSession(db *gorm.DB) gin.HandlerFunc {
 			Acct: c.GetString("stripe_acct"),
 		})
 
+		fmt.Println(sess.URL)
 		data := createCheckoutSessionResponse{SessionID: sess.ID}
 		c.JSON(http.StatusOK, data)
 	}
