@@ -33,6 +33,7 @@ type Schedule struct {
 	TimeArray    []ScheduleTime `json:"timeArray"`
 	Days         pq.Int64Array  `json:"selectedDays" gorm:"type:integer[]"`
 	NotAvail     pq.StringArray `json:"notAvailArray,nilasempty" gorm:"type:text[]"`
+	ShowAllCal   bool           `json:"showAll" gorm:"default:false"`
 }
 
 func (s *Schedule) AfterUpdate(tx *gorm.DB) (err error) {
