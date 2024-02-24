@@ -168,6 +168,10 @@ func generatePdf(db *gorm.DB, items []types.PassItem, passTitle, name, email str
 	pdf.SetTitle("Passes", false)
 
 	for _, i := range items {
+		if i.GetSku() == "SVCFEE" {
+			continue
+		}
+
 		if strings.HasPrefix(i.GetSku(), "SHOW") {
 			skuPieces := showSkuRe.FindAllStringSubmatch(i.GetSku(), -1)
 			pid := skuPieces[0][1]
