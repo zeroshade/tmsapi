@@ -675,7 +675,7 @@ func StripeWebhook(db *gorm.DB) gin.HandlerFunc {
 				log.Println(err)
 			}
 
-			if pi.Acct == "acct_1KajuuPBUMQYQx2b" && strings.HasPrefix(pm.Description, "Deposit for") {
+			if (pi.Acct == "acct_1KajuuPBUMQYQx2b" || pi.Acct == "acct_1InCeDPOYCTX1AoD") && strings.HasPrefix(pm.Description, "Deposit for") {
 				mg := mailgun.NewMailgun(mailgunDomain, apiKey)
 
 				content := conf.EmailContent
