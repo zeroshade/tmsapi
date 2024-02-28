@@ -11,8 +11,8 @@ import (
 	"time"
 )
 
-const ClientID = "zeGsn01T7JsFjLTRMuSAwuxwZeGfZUE0"
-const ClientSecret = "jC4KV7fjA33ZPLUTIZ1LSWXZLsZ4sAkOVYrPeMroGMz3T8Oor9zQDAu1Z-m3GGXu"
+const ClientID = "zKvMNhqDmWPU5zNLXRxOSh5VFN4ZSiZk"
+const ClientSecret = "eLv1jal9u4fIU79auoUwJeu-Hzg6RGDPqIoQ38imKAKHntFKOf2zjoT0CUCfH_L4"
 const Audience = "https://tmszero.auth0.com/api/v2/"
 const OAuthURL = "https://tmszero.auth0.com/oauth/token"
 
@@ -119,6 +119,7 @@ func (a *Auth0Client) GetRole(role string) *Role {
 
 	res, _ := a.client.Get(u.String())
 	defer res.Body.Close()
+
 	roles := make([]Role, 0)
 	dec := json.NewDecoder(res.Body)
 	if err := dec.Decode(&roles); err != nil {
@@ -181,10 +182,11 @@ func (a *Auth0Client) GetUsers(query string) []*User {
 
 	res, _ := a.client.Get(u.String())
 	defer res.Body.Close()
+
 	dec := json.NewDecoder(res.Body)
 	users := make([]*User, 0)
 	if err := dec.Decode(&users); err != nil {
-		log.Println("failed to decode users")
+		log.Println("failed to decode users ", err)
 	}
 	return users
 }
