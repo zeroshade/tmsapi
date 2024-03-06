@@ -358,7 +358,8 @@ func GetDeposits(db *gorm.DB) gin.HandlerFunc {
 		}
 
 		var deps []ManualDeposit
-		db.Find(&deps, `to_date(date, 'YYYY-MM-DD') BETWEEN ? AND (?::date + '1 month'::interval)`, c.Param("yearmonth")+"-01", c.Param("yearmonth")+"-01")
+		db.Find(&deps, `merchant_id = ? AND to_date(date, 'YYYY-MM-DD') BETWEEN ? AND (?::date + '1 month'::interval)`,
+			c.Param("merchantid"), c.Param("yearmonth")+"-01", c.Param("yearmonth")+"-01")
 
 		for _, d := range deps {
 			res = append(res, DepositSearchResult{
