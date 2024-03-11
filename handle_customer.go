@@ -89,7 +89,9 @@ func SendClientMail(apiKey, host, email string, order *types.CheckoutOrder, conf
 	{{ range .PurchaseUnits -}}
 	<ul>
 	{{ range .Items -}}
+	{{- if ne .Sku "SVCFEE" }}
 	<li>{{ .Quantity }} {{ .Name }}, {{ .Description }}</li>
+	{{- end }}
 	{{- end }}
 	</ul>
 	{{- end }}
