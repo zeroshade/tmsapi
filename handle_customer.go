@@ -99,6 +99,9 @@ func SendClientMail(apiKey, host, email string, order *types.CheckoutOrder, conf
 
 	log.Println("Send Client Mail:", conf.EmailFrom, email, order.ID)
 	domain := strings.Split(conf.EmailFrom, "@")[1]
+	if domain == "captreefishingticket.com" {
+		domain = "captree.com"
+	}
 	mg := mailgun.NewMailgun("mg."+domain, apiKey)
 
 	t := template.Must(template.New("notify").Parse(tmpl))
