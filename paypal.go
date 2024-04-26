@@ -92,7 +92,7 @@ func HandlePaypalWebhook(db *gorm.DB) gin.HandlerFunc {
 			}
 			db.Create(we.Resource)
 			for _, l := range val.Links {
-				if l.Rel == "up" {
+				if l.Rel == "up" || l.Rel == "sale" {
 					req, err := http.NewRequest(l.Method, l.Href, nil)
 					if err != nil {
 						log.Println(err)
