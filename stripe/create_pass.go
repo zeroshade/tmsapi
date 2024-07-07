@@ -67,7 +67,15 @@ func newDrawPass(f *gofpdf.Fpdf, conf *types.MerchantConfig, passTitle string, i
 	f.SetDrawColor(0, 0, 0x88)
 	f.Rect(left, starty, 205, 43, "F")
 	f.Ln(5)
-	f.ImageOptions("logo", left+45, starty, 205-left-90, 28, true, opt, 0, "")
+	if len(conf.LogoBytes) > 0 {
+		f.ImageOptions("logo", left+45, starty, 205-left-90, 28, true, opt, 0, "")
+	} else {
+		f.SetFont("Courier", "B", 20)
+		f.SetXY(left, starty)
+		f.SetTextColor(0xFF, 0xFF, 0xFF)
+		f.WriteAligned(205-left, 20, info.boat.Name, "C")
+	}
+
 	f.SetX(left + 5)
 	f.SetFont("Courier", "B", 10)
 	f.SetTextColor(0, 0xFF, 0xFF)
@@ -198,7 +206,10 @@ func generatePdf(db *gorm.DB, config *types.MerchantConfig, items []types.PassIt
 	pdf := gofpdf.New("P", "mm", "Letter", ".")
 	pdf.SetTitle("Boarding Passes", true)
 
-	pdf.RegisterImageOptionsReader("logo", opt, bytes.NewReader(config.LogoBytes))
+	if len(config.LogoBytes) > 0 {
+		pdf.RegisterImageOptionsReader("logo", opt, bytes.NewReader(config.LogoBytes))
+	}
+
 	tripPasses := make(map[int]passInfo)
 
 	for _, i := range items {
@@ -250,10 +261,14 @@ func generatePdf(db *gorm.DB, config *types.MerchantConfig, items []types.PassIt
 func findDuration(prod *types.Product, trip time.Time) time.Duration {
 	startTime := trip.Format("15:04")
 
+	truncatedTrip := trip.Truncate(time.Hour * 24)
+	fmt.Println(truncatedTrip.String())
 	for _, s := range prod.Schedules {
-		if trip.Before(s.Start) || trip.After(s.End) {
+		if truncatedTrip.Before(s.Start.In(timeloc)) || truncatedTrip.After(s.End.In(timeloc)) {
 			continue
 		}
+
+		fmt.Println(trip.Weekday())
 
 		found := false
 		for _, d := range s.Days {
@@ -265,6 +280,8 @@ func findDuration(prod *types.Product, trip time.Time) time.Duration {
 		if !found {
 			continue
 		}
+
+		fmt.Println(found)
 
 		for _, t := range s.TimeArray {
 			if t.StartTime == startTime {
