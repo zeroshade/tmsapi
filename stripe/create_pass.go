@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"os"
 	"regexp"
 	"strconv"
 	"strings"
@@ -65,15 +66,18 @@ func newDrawPass(f *gofpdf.Fpdf, conf *types.MerchantConfig, passTitle string, i
 
 	f.SetFillColor(0, 0, 0x88)
 	f.SetDrawColor(0, 0, 0x88)
-	f.Rect(left, starty, 205, 43, "F")
-	f.Ln(5)
 	if len(conf.LogoBytes) > 0 {
+		f.Rect(left, starty, 205, 43, "F")
+		f.Ln(5)
 		f.ImageOptions("logo", left+45, starty, 205-left-90, 28, true, opt, 0, "")
 	} else {
+		f.Rect(left, starty, 205, 23, "F")
+		f.Ln(5)
 		f.SetFont("Courier", "B", 20)
 		f.SetXY(left, starty)
 		f.SetTextColor(0xFF, 0xFF, 0xFF)
 		f.WriteAligned(205-left, 20, info.boat.Name, "C")
+		f.SetXY(left, starty+15)
 	}
 
 	f.SetX(left + 5)
@@ -197,6 +201,13 @@ func newDrawPass(f *gofpdf.Fpdf, conf *types.MerchantConfig, passTitle string, i
 	f.ImageOptions(qrname, left+85, f.GetY(), 0, 0, true, opt, 0, "")
 
 	f.Rect(left, starty, 205, f.GetY()-starty, "D")
+}
+
+func ExternalGeneratePDF(db *gorm.DB, config *types.MerchantConfig, payid, name, email string) {
+	items, _, _ := (Handler{}).GetPassItems(config, db, payid)
+	f, _ := os.Create("order_tmp.pdf")
+	defer f.Close()
+	generatePdf(db, config, items, "Boarding Passes", name, email, payid, f)
 }
 
 func generatePdf(db *gorm.DB, config *types.MerchantConfig, items []types.PassItem, passTitle, name, email, orderid string, w io.Writer) {
