@@ -273,6 +273,20 @@ func ConfirmAndSend(db *gorm.DB) gin.HandlerFunc {
 		}
 
 		db.Save(&order)
+		if strings.HasPrefix(order.PurchaseUnits[0].Items[0].Sku, "SHOW") {
+			skuPieces := showSkuRe.FindAllStringSubmatch(order.PurchaseUnits[0].Items[0].Sku, -1)
+			pid := skuPieces[0][1]
+
+			var quantity uint = 0
+			for _, pu := range order.PurchaseUnits {
+				for _, item := range pu.Items {
+					quantity += item.Quantity
+				}
+			}
+
+			db.Model(types.Show{}).Where("id = ?", pid).
+				UpdateColumn("tickets_available", gorm.Expr("tickets_available - ?", quantity))
+		}
 
 		// re := regexp.MustCompile(`(\d+)[A-Z]+(\d{10})`)
 
