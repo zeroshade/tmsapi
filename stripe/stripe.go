@@ -368,7 +368,9 @@ func sendNotifyEmail(apiKey string, conf *types.MerchantConfig, payment *stripe.
 	log.Println("Send Notify Mail:", payment.ID, conf.EmailFrom)
 	const tmpl = `
 	Tickets Purchased By: {{ .Payer }} <a href='mailto:{{ .PayerEmail }}'>{{ .PayerEmail }}</a>
-	<br /><br />
+	<br />
+	Phone: {{- if .Phone -}}{{.Phone}}{{- else -}}Not Provided{{- end -}}
+	<br />
 	<ul>
 	{{ range .Items -}}
 	<li>{{ .Quantity }} {{ .Name }} {{ .Description }}</li>
@@ -387,6 +389,7 @@ func sendNotifyEmail(apiKey string, conf *types.MerchantConfig, payment *stripe.
 	if err := t.Execute(&tpl, gin.H{
 		"Payer":      details.Name,
 		"PayerEmail": details.Email,
+		"Phone":      details.Phone,
 		"Items":      itemList}); err != nil {
 		return err
 	}
