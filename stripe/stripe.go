@@ -358,8 +358,8 @@ type notifyItem struct {
 }
 
 var (
-	mailgunPublicKey = os.Getenv("MAILGUN_PUBLIC_KEY")
-	mailgunDomain    = os.Getenv("MAILGUN_DOMAIN")
+	// mailgunPublicKey = os.Getenv("MAILGUN_PUBLIC_KEY")
+	mailgunDomain = os.Getenv("MAILGUN_DOMAIN")
 )
 
 func sendNotifyEmail(apiKey string, conf *types.MerchantConfig, payment *stripe.PaymentIntent, itemList []notifyItem) error {
@@ -465,7 +465,7 @@ func sendCustomerEmail(db *gorm.DB, apiKey, host string, conf *types.MerchantCon
 	var pdf bytes.Buffer
 
 	items, _, _ := (Handler{}).GetPassItems(conf, db, payment.ID)
-	generatePdf(db, conf, items, "Boarding Passes", details.Name, details.Email, payment.ID, &pdf)
+	internal.GeneratePdf(db, items, conf.PassTitle, details.Name, details.Email, &pdf)
 	m.AddBufferAttachment("boardingpasses.pdf", pdf.Bytes())
 
 	resp, id, err := mg.Send(context.Background(), m)
