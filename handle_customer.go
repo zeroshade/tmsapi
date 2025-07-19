@@ -8,6 +8,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"regexp"
 	"strings"
 	"text/template"
 
@@ -22,6 +23,7 @@ var mailgunPublicKey = os.Getenv("MAILGUN_PUBLIC_KEY")
 var twilioAccountSid = os.Getenv("TWILIO_ACCOUNT_SID")
 var twilioAuthToken = os.Getenv("TWILIO_AUTH_TOKEN")
 var twilioMsgingService = os.Getenv("TWILIO_MSGING_SERVICE")
+var showSkuRe = regexp.MustCompile(`SHOW(\d+)([A-Z]+)`)
 
 func sendNotifyEmail(apiKey string, conf *types.MerchantConfig, order *types.CheckoutOrder) error {
 	log.Println("Send Notify Mail:", order.ID, conf.EmailFrom)
